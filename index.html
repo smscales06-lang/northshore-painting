@@ -164,8 +164,11 @@
   .modal h3{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin-bottom:18px}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;color:var(--cream-dim);margin-bottom:6px;letter-spacing:.03em}
-  .field input,.field textarea{width:100%;background:var(--slate);border:1px solid var(--line);border-radius:9px;color:var(--cream);padding:11px 12px;font-family:inherit;font-size:16px}
-  .field input:focus,.field textarea:focus{outline:none;border-color:var(--teal)}
+  .field input,.field textarea,.field select{width:100%;background:var(--slate);border:1px solid var(--line);border-radius:9px;color:var(--cream);padding:11px 12px;font-family:inherit;font-size:16px}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--teal)}
+  .split-row{display:flex;gap:10px;align-items:center}
+  .split-row input[type=number]{width:70px;flex:0 0 70px;background:var(--slate);border:1px solid var(--line);border-radius:9px;color:var(--cream);padding:11px 8px;font-family:inherit;font-size:16px;text-align:center}
+  .split-row input:focus{outline:none;border-color:var(--teal)}
   .field textarea{resize:vertical;min-height:56px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .swatches{display:flex;gap:8px;margin-top:2px}
@@ -238,6 +241,19 @@
   .p-jobs-title{font-size:16px}
   .add-btn-sm{padding:9px 16px;font-size:13px}
   .p-empty{display:none}
+
+  /* status badges */
+  .status-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:6px;margin-top:4px}
+  .status-quoted{background:#3a3320;color:#e0b84a}
+  .status-booked{background:var(--slate-3);color:var(--cream-dim)}
+  .status-in-progress{background:#1f3a4d;color:var(--teal)}
+  .status-done{background:var(--open);color:#7fd9b8}
+  .status-paid{background:var(--teal-dim);color:#eafff9}
+
+  /* export / print buttons */
+  .export-btn{background:var(--slate-3);color:var(--cream);border:1px solid var(--line);font-weight:600;font-size:12.5px;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .export-btn:hover{background:var(--line)}
+  .print-btn{background:none;border:1px dashed var(--teal-dim);color:var(--teal);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;width:100%;cursor:pointer;font-family:inherit;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -281,7 +297,10 @@
   <div class="grid" id="grid"></div>
 
   <section class="joblist">
-    <h2>Upcoming jobs</h2>
+    <div class="cal-head" style="margin-bottom:12px;">
+      <h2 style="margin-bottom:0;">Upcoming jobs</h2>
+      <button class="export-btn" id="exportIcsBtn" type="button">Export calendar (.ics)</button>
+    </div>
     <div id="jobList"></div>
   </section>
   </div>
@@ -302,7 +321,10 @@
 
     <div class="cal-head p-jobs-head">
       <div class="month p-jobs-title">Jobs</div>
-      <button class="add-btn add-btn-sm" id="pAddBtn" type="button">+ Add a job</button>
+      <div style="display:flex;gap:8px;">
+        <button class="export-btn" id="exportCsvBtn" type="button">Export CSV</button>
+        <button class="add-btn add-btn-sm" id="pAddBtn" type="button">+ Add a job</button>
+      </div>
     </div>
     <div id="pJobList"></div>
     <div class="p-empty" id="pEmptyState">No jobs yet. Tap &quot;+ Add a job&quot; to log your first one.</div>
@@ -347,6 +369,7 @@
       </div>
 
       <div class="err" id="pErr"></div>
+      <button class="print-btn hidden" id="pPrintBtn" type="button">Print / save invoice as PDF</button>
       <div class="actions">
         <button class="btn-del hidden" id="pDeleteBtn" type="button">Delete this job</button>
         <button class="btn-cancel" id="pCancelBtn" type="button">Cancel</button>
@@ -358,11 +381,21 @@
   <!-- Owner names modal -->
   <div class="scrim" id="namesScrim">
     <div class="modal" id="namesModal">
-      <h3>Owner names</h3>
+      <h3>Owner names &amp; split</h3>
       <div class="row2">
         <div class="field"><label>Owner 1</label><input id="nameInputA" type="text" placeholder="Sam"></div>
         <div class="field"><label>Owner 2</label><input id="nameInputB" type="text" placeholder="Brother"></div>
       </div>
+      <div class="field">
+        <label>Profit split (must add up to 100)</label>
+        <div class="split-row">
+          <input id="splitInputA" type="number" min="0" max="100" step="1">
+          <span>/</span>
+          <input id="splitInputB" type="number" min="0" max="100" step="1">
+          <span style="color:var(--cream-dim);font-size:12px;">% each</span>
+        </div>
+      </div>
+      <div class="err" id="namesErr"></div>
       <div class="actions">
         <button class="btn-cancel" id="namesCancelBtn" type="button">Cancel</button>
         <button class="btn-save" id="namesSaveBtn" type="button">Save names</button>
@@ -383,8 +416,26 @@
         <div class="field"><label>End date</label><input id="fEnd" type="date"></div>
       </div>
       <div class="field">
+        <label>Status</label>
+        <select id="fStatus">
+          <option value="quoted">Quoted</option>
+          <option value="booked">Booked</option>
+          <option value="in-progress">In progress</option>
+          <option value="done">Done</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Customer phone (optional)</label><input id="fPhone" type="tel" placeholder="(847) 555-0100" autocomplete="off"></div>
+        <div class="field"><label>Customer email (optional)</label><input id="fEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
+      </div>
+      <div class="field">
+        <label>Job address (optional)</label>
+        <input id="fAddress" type="text" placeholder="123 Lake St, Fox Lake, IL" autocomplete="off">
+      </div>
+      <div class="field">
         <label>Notes (optional)</label>
-        <textarea id="fNotes" placeholder="Scope, deposit, address…"></textarea>
+        <textarea id="fNotes" placeholder="Scope, deposit…"></textarea>
       </div>
       <div class="field">
         <label>Color</label>
@@ -401,6 +452,21 @@
 
 <script>
 const STORE_KEY='nspg-jobs-v1';
+let jobsRev=0, profitRev=0;
+
+// Every stored payload is wrapped with a revision counter so concurrent
+// saves (two phones open at once) can be detected instead of silently
+// overwriting each other. Data saved before this existed is a bare array -
+// treated as revision 0 the first time it's read.
+function wrapRev(items,rev){ return JSON.stringify({rev,items}); }
+function unwrapRev(raw){
+  if(!raw) return {rev:0,items:null};
+  try{
+    const parsed=JSON.parse(raw);
+    if(Array.isArray(parsed)) return {rev:0,items:parsed};
+    return {rev:Number(parsed.rev)||0,items:parsed.items||[]};
+  }catch(e){ return {rev:0,items:null}; }
+}
 
 /* ──────────────────────────────────────────────────────────────
    OPTIONAL CLOUD SYNC  (leave blank to just save on this device)
@@ -495,10 +561,29 @@ const Store={
   }
 };
 async function load(){
-  try{ const v=await Store.get(STORE_KEY); jobs=v?JSON.parse(v):[]; }
-  catch(e){ jobs=[]; }
+  try{
+    const v=await Store.get(STORE_KEY);
+    const u=unwrapRev(v);
+    jobs=u.items||[]; jobsRev=u.rev;
+  }catch(e){ jobs=[]; jobsRev=0; }
 }
-async function save(){ await Store.set(STORE_KEY,JSON.stringify(jobs)); }
+async function save(){
+  // If we've confirmed what the cloud has this session, re-check right
+  // before writing - if it moved since we last loaded (another device
+  // saved in between), refuse to save over it instead of silently
+  // discarding their change.
+  if(CLOUD && CLOUD_REACHABLE && cloudReadConfirmed[STORE_KEY]){
+    try{
+      const latest=unwrapRev(await Store.cloudGet(STORE_KEY));
+      if(latest.rev!==jobsRev){
+        alert('This schedule changed elsewhere (another device or tab) since you loaded this page. To avoid overwriting that change, this edit was NOT saved. Reload the page to see the latest, then make your change again.');
+        return;
+      }
+    }catch(e){ /* couldn't verify - fall through and save anyway */ }
+  }
+  jobsRev+=1;
+  await Store.set(STORE_KEY,wrapRev(jobs,jobsRev));
+}
 
 // ---------- helpers ----------
 function jobsOn(dISO){
@@ -573,12 +658,19 @@ function renderJobList(){
     let when = active ? 'On now' : days===1 ? 'Tomorrow' : `in ${days} days`;
     const barCls='bar'+j.color.replace('c','');
     const note=j.notes?`<div class="jnote">${j.notes.replace(/</g,'&lt;')}</div>`:'';
+    const status=j.status||'booked';
+    const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done',paid:'Paid'};
+    const badge=`<span class="status-badge status-${status}">${statusLabels[status]||status}</span>`;
+    const contactBits=[j.phone,j.address].filter(Boolean);
+    const contact=contactBits.length?`<div class="jnote">${contactBits.join(' \u00B7 ').replace(/</g,'&lt;')}</div>`:'';
     return `<div class="job-item ${active?'active-now':''}" data-id="${j.id}">
       <div class="bar ${barCls}"></div>
       <div class="info">
         <div class="jn">${j.name.replace(/</g,'&lt;')}</div>
         <div class="jd">${range} \u00B7 ${wd} working day${wd!==1?'s':''}</div>
+        ${contact}
         ${note}
+        ${badge}
       </div>
       <div class="when">${when}</div>
     </div>`;
@@ -710,6 +802,10 @@ function openModal(job,prefillDate){
   $('fName').value = job?job.name:'';
   $('fStart').value = job?job.start:(prefillDate||todayISO);
   $('fEnd').value = job?job.end:(prefillDate||todayISO);
+  $('fStatus').value = job?(job.status||'booked'):'booked';
+  $('fPhone').value = job?(job.phone||''):'';
+  $('fEmail').value = job?(job.email||''):'';
+  $('fAddress').value = job?(job.address||''):'';
   $('fNotes').value = job?(job.notes||''):'';
   pickedColor = job?job.color:COLORS[jobs.length%COLORS.length];
   $('err').textContent='';
@@ -725,7 +821,15 @@ async function saveJob(){
   if(!name){ $('err').textContent='Give the job a name.'; return; }
   if(!start||!end){ $('err').textContent='Pick start and end dates.'; return; }
   if(end<start){ $('err').textContent='End date can\u2019t be before the start.'; return; }
-  const data={name,start,end,notes:$('fNotes').value.trim(),color:pickedColor};
+  const data={
+    name,start,end,
+    status:$('fStatus').value||'booked',
+    phone:$('fPhone').value.trim(),
+    email:$('fEmail').value.trim(),
+    address:$('fAddress').value.trim(),
+    notes:$('fNotes').value.trim(),
+    color:pickedColor
+  };
   if(editingId){
     const j=jobs.find(x=>x.id===editingId); Object.assign(j,data);
   }else{
@@ -744,7 +848,7 @@ function refresh(){ renderOpenings(); renderCalendar(); renderJobList(); }
 const PROFIT_JOBS_KEY='nspg-profit-jobs-v1';
 const PROFIT_NAMES_KEY='nspg-profit-owner-names-v1';
 let profitJobs=[];
-let ownerNames={a:'Sam',b:'Brother'};
+let ownerNames={a:'Sam',b:'Brother',splitA:50,splitB:50};
 let pEditingId=null;
 let pMaterialRows=[];
 let pLaborRows=[];
@@ -768,16 +872,32 @@ function pFormatDate(d){
 }
 
 async function loadProfitData(){
-  try{ const v=await Store.get(PROFIT_JOBS_KEY); profitJobs=v?JSON.parse(v):[]; }
-  catch(e){ profitJobs=profitJobs||[]; }
-  try{ const v2=await Store.get(PROFIT_NAMES_KEY); if(v2){ ownerNames=JSON.parse(v2); } }
-  catch(e){ /* keep defaults */ }
+  try{
+    const v=await Store.get(PROFIT_JOBS_KEY);
+    const u=unwrapRev(v);
+    profitJobs=u.items||[]; profitRev=u.rev;
+  }catch(e){ profitJobs=profitJobs||[]; }
+  try{
+    const v2=await Store.get(PROFIT_NAMES_KEY);
+    if(v2){
+      const parsed=JSON.parse(v2);
+      ownerNames={a:parsed.a||'Sam',b:parsed.b||'Brother',splitA:Number(parsed.splitA)||50,splitB:Number(parsed.splitB)||50};
+    }
+  }catch(e){ /* keep defaults */ }
   applyOwnerNames();
 }
 async function saveProfitJobs(){
   $('pStatusMsg').textContent='Saving\u2026';
   try{
-    await Store.set(PROFIT_JOBS_KEY,JSON.stringify(profitJobs));
+    if(CLOUD && CLOUD_REACHABLE && cloudReadConfirmed[PROFIT_JOBS_KEY]){
+      const latest=unwrapRev(await Store.cloudGet(PROFIT_JOBS_KEY));
+      if(latest.rev!==profitRev){
+        $('pStatusMsg').textContent='Not saved \u2014 changed elsewhere. Reload and try again.';
+        return;
+      }
+    }
+    profitRev+=1;
+    await Store.set(PROFIT_JOBS_KEY,wrapRev(profitJobs,profitRev));
     $('pStatusMsg').textContent=CLOUD?'Saved & synced':'Saved to this device';
     setTimeout(()=>{ $('pStatusMsg').textContent=''; },1500);
   }catch(e){
@@ -799,18 +919,17 @@ function pJobFinancials(job){
   const labor=(job.labor||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
   const revenue=parseFloat(job.revenue)||0;
   const profit=revenue-materials-labor;
-  return {materials,labor,revenue,profit,half:profit/2};
+  return {materials,labor,revenue,profit,shareA:profit*(ownerNames.splitA/100),shareB:profit*(ownerNames.splitB/100)};
 }
 
 function renderProfitSummary(){
   let revenue=0,materials=0,labor=0,profit=0;
   profitJobs.forEach(j=>{ const f=pJobFinancials(j); revenue+=f.revenue; materials+=f.materials; labor+=f.labor; profit+=f.profit; });
-  const half=profit/2;
   const totalEl=$('pTotalProfit');
   totalEl.textContent=pFmt(profit);
   totalEl.classList.toggle('neg',profit<0);
-  $('pShareA').textContent=pFmt(half);
-  $('pShareB').textContent=pFmt(half);
+  $('pShareA').textContent=pFmt(profit*(ownerNames.splitA/100));
+  $('pShareB').textContent=pFmt(profit*(ownerNames.splitB/100));
   $('pSumRevenue').textContent='Revenue '+pFmt(revenue);
   $('pSumCosts').textContent='Costs '+pFmt(materials+labor);
 }
@@ -902,6 +1021,7 @@ function openProfitModal(jobId){
     pLaborRows=[];
     deleteBtn.style.display='none';
   }
+  $('pPrintBtn').style.display = jobId?'block':'none';
   $('pErr').textContent='';
   renderMaterialRows();
   renderLaborRows();
@@ -979,8 +1099,8 @@ function updateLiveCalc(){
   $('pCalcMaterials').textContent=pFmt(materials);
   $('pCalcLabor').textContent=pFmt(labor);
   $('pCalcProfit').textContent=pFmt(profit);
-  $('pCalcShareA').textContent=pFmt(profit/2);
-  $('pCalcShareB').textContent=pFmt(profit/2);
+  $('pCalcShareA').textContent=pFmt(profit*(ownerNames.splitA/100));
+  $('pCalcShareB').textContent=pFmt(profit*(ownerNames.splitB/100));
 }
 
 async function handleSaveProfitJob(){
@@ -1021,9 +1141,102 @@ async function handleDeleteProfitJob(){
 function openNamesModal(){
   $('nameInputA').value=ownerNames.a;
   $('nameInputB').value=ownerNames.b;
+  $('splitInputA').value=ownerNames.splitA;
+  $('splitInputB').value=ownerNames.splitB;
+  $('namesErr').textContent='';
   $('namesScrim').classList.add('show');
 }
 function closeNamesModal(){ $('namesScrim').classList.remove('show'); }
+
+// ---------- export ----------
+function icsEscape(s){
+  return String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+}
+function icsDate(dISO,endExclusive){
+  // all-day events in ICS use DTEND as the day AFTER the last day
+  const d=parse(dISO);
+  if(endExclusive) d.setDate(d.getDate()+1);
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+}
+function downloadFile(filename,mime,text){
+  const blob=new Blob([text],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportICS(){
+  const now=new Date();
+  const stamp=`${now.getUTCFullYear()}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//NorthShore Painting Group//Job Schedule//EN'];
+  jobs.forEach(j=>{
+    const desc=[j.notes,j.address?('Address: '+j.address):'',j.phone?('Phone: '+j.phone):'',j.email?('Email: '+j.email):''].filter(Boolean).join('\\n');
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${j.id}@northshore-painting`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(j.start,false)}`,
+      `DTEND;VALUE=DATE:${icsDate(j.end,true)}`,
+      `SUMMARY:${icsEscape(j.name)}`,
+      desc?`DESCRIPTION:${icsEscape(desc)}`:null,
+      j.address?`LOCATION:${icsEscape(j.address)}`:null,
+      'END:VEVENT'
+    );
+  });
+  lines.push('END:VCALENDAR');
+  downloadFile('northshore-schedule.ics','text/calendar',lines.filter(Boolean).join('\r\n'));
+}
+
+function csvField(v){
+  const s=String(v==null?'':v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function exportProfitCSV(){
+  const rows=[['Date','Job','Revenue','Expenses','Labor','Profit',ownerNames.a+' share',ownerNames.b+' share']];
+  [...profitJobs].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(job=>{
+    const f=pJobFinancials(job);
+    rows.push([job.date||'',job.name||'',f.revenue.toFixed(2),f.materials.toFixed(2),f.labor.toFixed(2),f.profit.toFixed(2),f.shareA.toFixed(2),f.shareB.toFixed(2)]);
+  });
+  const csv=rows.map(r=>r.map(csvField).join(',')).join('\r\n');
+  downloadFile('northshore-profit-ledger.csv','text/csv',csv);
+}
+
+function printInvoice(jobId){
+  const job=profitJobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const f=pJobFinancials(job);
+  const win=window.open('','_blank');
+  if(!win){ alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return; }
+  const expenseRows=(job.materials||[]).map(m=>`<tr><td>${pEscape(m.desc||'Expense')}</td><td style="text-align:right">${pFmt(parseFloat(m.amount)||0)}</td></tr>`).join('');
+  const laborRows=(job.labor||[]).map(l=>`<tr><td>${pEscape(l.worker||'Labor')}</td><td style="text-align:right">${pFmt(parseFloat(l.amount)||0)}</td></tr>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice — ${pEscape(job.name||'')}</title>
+    <style>
+      body{font-family:Arial,sans-serif;color:#111;padding:32px;max-width:640px;margin:0 auto}
+      h1{font-size:22px;margin-bottom:2px}
+      .meta{color:#555;font-size:13px;margin-bottom:24px}
+      table{width:100%;border-collapse:collapse;margin-bottom:18px}
+      td,th{padding:6px 4px;border-bottom:1px solid #ddd;font-size:14px;text-align:left}
+      .total{font-weight:bold;font-size:16px;border-top:2px solid #111}
+      .brand{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:18px}
+    </style></head><body>
+    <div class="brand">NorthShore Painting Group</div>
+    <h1>${pEscape(job.name||'Untitled job')}</h1>
+    <div class="meta">${job.date?pFormatDate(job.date):''}</div>
+    <table>
+      <tr><th>Item</th><th style="text-align:right">Amount</th></tr>
+      <tr><td>Total charged to client</td><td style="text-align:right">${pFmt(f.revenue)}</td></tr>
+    </table>
+    ${expenseRows?`<table><tr><th>Expense</th><th style="text-align:right">Amount</th></tr>${expenseRows}</table>`:''}
+    ${laborRows?`<table><tr><th>Worker</th><th style="text-align:right">Paid</th></tr>${laborRows}</table>`:''}
+    <table>
+      <tr class="total"><td>Net profit</td><td style="text-align:right">${pFmt(f.profit)}</td></tr>
+    </table>
+    </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>win.print(),300);
+}
 
 // ---------- tabs ----------
 function showScheduleTab(){
@@ -1051,6 +1264,9 @@ $('scrim').onclick=e=>{ if(e.target===$('scrim')) closeModal(); };
 $('prev').onclick=()=>{ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); };
 $('next').onclick=()=>{ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); };
 $('todayBtn').onclick=()=>{ const n=new Date(); viewYear=n.getFullYear(); viewMonth=n.getMonth(); renderCalendar(); };
+$('exportIcsBtn').onclick=exportICS;
+$('exportCsvBtn').onclick=exportProfitCSV;
+$('pPrintBtn').onclick=()=>{ if(pEditingId) printInvoice(pEditingId); };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeProfitModal(); closeNamesModal(); } });
 
 $('tabSchedule').onclick=showScheduleTab;
@@ -1070,10 +1286,19 @@ $('pNameB').onclick=openNamesModal;
 $('namesCancelBtn').onclick=closeNamesModal;
 $('namesScrim').onclick=e=>{ if(e.target===$('namesScrim')) closeNamesModal(); };
 $('namesSaveBtn').onclick=async()=>{
+  const splitA=Number($('splitInputA').value);
+  const splitB=Number($('splitInputB').value);
+  if(!isFinite(splitA)||!isFinite(splitB)||Math.round(splitA+splitB)!==100){
+    $('namesErr').textContent='Split must add up to 100.';
+    return;
+  }
   ownerNames.a=$('nameInputA').value.trim()||'Owner 1';
   ownerNames.b=$('nameInputB').value.trim()||'Owner 2';
+  ownerNames.splitA=splitA;
+  ownerNames.splitB=splitB;
   await saveOwnerNames();
   applyOwnerNames();
+  refreshProfit();
   closeNamesModal();
 };
 
