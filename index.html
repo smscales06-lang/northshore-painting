@@ -249,6 +249,7 @@
   .status-in-progress{background:#1f3a4d;color:var(--teal)}
   .status-done{background:var(--open);color:#7fd9b8}
   .status-paid{background:var(--teal-dim);color:#eafff9}
+  .rain-badge{background:#3a2020;color:#e08a7a;margin-left:6px}
 
   /* export / print buttons */
   .export-btn{background:var(--slate-3);color:var(--cream);border:1px solid var(--line);font-weight:600;font-size:12.5px;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -677,6 +678,68 @@ function renderJobList(){
   }).join('');
   box.querySelectorAll('.job-item').forEach(el=>{
     el.onclick=()=>{const j=jobs.find(x=>x.id===el.dataset.id); if(j) openModal(j);};
+  });
+  attachWeatherBadges();
+}
+
+// ---------- weather (best-effort rain-risk flag on upcoming jobs with an address) ----------
+// Uses Open-Meteo, a free no-API-key weather service. Purely additive - any
+// failure (offline, address doesn't geocode, job too far out to forecast)
+// just means no badge shows, never an error the user sees.
+const weatherCache={};
+const WEATHER_HORIZON_DAYS=14; // beyond this, forecasts aren't reliable enough to show
+
+async function geocodeAddress(address){
+  const key='geo:'+address;
+  if(key in weatherCache) return weatherCache[key];
+  try{
+    const r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=1&language=en&format=json`);
+    if(!r.ok) throw new Error('geocode failed');
+    const j=await r.json();
+    const hit=j.results&&j.results[0];
+    const loc=hit?{lat:hit.latitude,lon:hit.longitude}:null;
+    weatherCache[key]=loc;
+    return loc;
+  }catch(e){ weatherCache[key]=null; return null; }
+}
+
+async function rainRiskFor(job){
+  if(!job.address) return null;
+  const start=parse(job.start);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const daysOut=Math.round((start-today)/86400000);
+  if(daysOut<0 || daysOut>WEATHER_HORIZON_DAYS) return null;
+  const cacheKey=`risk:${job.address}|${job.start}|${job.end}`;
+  if(cacheKey in weatherCache) return weatherCache[cacheKey];
+  const loc=await geocodeAddress(job.address);
+  if(!loc){ weatherCache[cacheKey]=null; return null; }
+  const horizonEnd=new Date(today); horizonEnd.setDate(horizonEnd.getDate()+WEATHER_HORIZON_DAYS);
+  const endCapped=parse(job.end)>horizonEnd?horizonEnd:parse(job.end);
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=precipitation_probability_max&timezone=auto&start_date=${job.start}&end_date=${iso(endCapped)}`);
+    if(!r.ok) throw new Error('forecast failed');
+    const j=await r.json();
+    const probs=(j.daily&&j.daily.precipitation_probability_max)||[];
+    const maxProb=probs.length?Math.max(...probs):null;
+    weatherCache[cacheKey]=maxProb;
+    return maxProb;
+  }catch(e){ weatherCache[cacheKey]=null; return null; }
+}
+
+function attachWeatherBadges(){
+  document.querySelectorAll('#jobList .job-item[data-id]').forEach(el=>{
+    const j=jobs.find(x=>x.id===el.dataset.id);
+    if(!j) return;
+    rainRiskFor(j).then(prob=>{
+      if(prob==null || prob<60) return;
+      const info=el.querySelector('.info');
+      if(info && !info.querySelector('.rain-badge')){
+        const b=document.createElement('span');
+        b.className='status-badge rain-badge';
+        b.textContent=`☔ ${Math.round(prob)}% rain risk`;
+        info.appendChild(b);
+      }
+    });
   });
 }
 
