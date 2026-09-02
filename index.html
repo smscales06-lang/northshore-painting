@@ -95,6 +95,9 @@
   .job-item .jnote{font-size:12px;color:#7d9098;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .job-item .when{font-size:12px;font-weight:600;color:var(--cream-dim);text-align:right;flex:0 0 auto;white-space:nowrap}
   .job-item.active-now .when{color:var(--teal)}
+  .job-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+  .quick-done-btn{background:var(--slate-3);color:var(--cream-dim);border:1px solid var(--line);font-weight:600;font-size:11px;padding:5px 9px;border-radius:7px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .quick-done-btn:hover{background:var(--line);color:var(--cream)}
   .joblist .empty{color:var(--cream-dim);font-size:14px;padding:14px 2px;border:1px dashed var(--line);border-radius:12px;text-align:center}
   .bar0{background:#2fb6ab}.bar1{background:#e0a050}.bar2{background:#d98ca0}.bar3{background:#8ab4e0}.bar4{background:#9fc46a}.bar5{background:#c79bd8}
 
@@ -191,6 +194,16 @@
   .p-summary .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--cream-dim);font-weight:600}
   .p-summary .big{font-family:'Fraunces',serif;font-weight:600;font-size:32px;margin:4px 0 14px;line-height:1;color:var(--cream)}
   .p-summary .big.neg{color:var(--danger)}
+
+  .month-row{background:var(--slate-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+  .month-row-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .month-row-label{font-weight:700;font-size:14px;color:var(--cream)}
+  .month-row-amt{font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:var(--teal)}
+  .month-row-amt.neg{color:var(--danger)}
+  .month-row-sub{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--cream-dim);flex-wrap:wrap}
+  .month-override-input{width:110px;background:var(--slate);border:1px solid var(--line);border-radius:8px;color:var(--cream);padding:6px 8px;font-family:inherit;font-size:13px}
+  .month-override-input:focus{outline:none;border-color:var(--teal)}
+  .month-clear-btn{background:none;border:none;color:var(--teal);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0}
   .p-split{display:flex;border-top:1px dashed var(--line);padding-top:12px;position:relative}
   .p-split::after{content:"";position:absolute;top:12px;bottom:0;left:50%;border-left:1px dashed var(--line)}
   .p-col{flex:1;text-align:center}
@@ -303,6 +316,8 @@
       <button class="export-btn" id="exportIcsBtn" type="button">Export calendar (.ics)</button>
     </div>
     <div id="jobList"></div>
+    <button class="export-btn" id="toggleCompletedBtn" type="button" style="margin-top:12px;display:none;"></button>
+    <div id="completedJobList" style="margin-top:10px;display:none;"></div>
   </section>
   </div>
 
@@ -315,7 +330,11 @@
         <div class="p-col"><div class="who" id="pNameB">Brother</div><div class="amt" id="pShareB">$0</div></div>
       </div>
       <div class="p-sub"><span id="pSumRevenue">Revenue $0</span><span id="pSumCosts">Costs $0</span></div>
+      <div class="p-sub" style="margin-top:6px;"><span id="pThisMonth">This month: $0</span></div>
     </div>
+
+    <div class="crew-title" style="display:block;">Monthly totals</div>
+    <div id="monthlyList"></div>
 
     <div id="crewSectionTitle" class="crew-title">Paid to your crew</div>
     <div id="crewTotals"></div>
@@ -484,6 +503,7 @@ let jobs=[];
 let viewYear, viewMonth;          // currently displayed month
 let editingId=null;
 let pickedColor='c0';
+let showCompleted=false;
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
@@ -636,49 +656,97 @@ const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','De
 const fmt=d=>`${DOW[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}`;
 const fmtShort=d=>`${MON[d.getMonth()]} ${d.getDate()}`;
 
+function isFinishedStatus(status){ return status==='done'||status==='paid'; }
+
+function renderJobCard(j){
+  const s=parse(j.start), e=parse(j.end);
+  const sameMonth=s.getMonth()===e.getMonth();
+  const range = j.start===j.end ? fmt(s)
+      : sameMonth ? `${fmt(s)} \u2013 ${e.getDate()}`
+      : `${fmt(s)} \u2013 ${fmtShort(e)}`;
+  // working days in the job
+  let wd=0; for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)) if(isWorkday(d)) wd++;
+  const active = j.start<=todayISO && j.end>=todayISO;
+  const days=Math.round((parse(j.start)-parse(todayISO))/86400000);
+  let when = active ? 'On now' : days===1 ? 'Tomorrow' : `in ${days} days`;
+  const barCls='bar'+j.color.replace('c','');
+  const note=j.notes?`<div class="jnote">${j.notes.replace(/</g,'&lt;')}</div>`:'';
+  const status=j.status||'booked';
+  const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done',paid:'Paid'};
+  const badge=`<span class="status-badge status-${status}">${statusLabels[status]||status}</span>`;
+  const contactBits=[j.phone,j.address].filter(Boolean);
+  const contact=contactBits.length?`<div class="jnote">${contactBits.join(' \u00B7 ').replace(/</g,'&lt;')}</div>`:'';
+  const finished=isFinishedStatus(status);
+  const quickBtn = finished
+    ? `<button type="button" class="quick-done-btn" data-quick="booked" data-id="${j.id}">Reopen</button>`
+    : `<button type="button" class="quick-done-btn" data-quick="done" data-id="${j.id}">Mark done</button>`;
+  return `<div class="job-item ${active?'active-now':''}" data-id="${j.id}">
+    <div class="bar ${barCls}"></div>
+    <div class="info">
+      <div class="jn">${j.name.replace(/</g,'&lt;')}</div>
+      <div class="jd">${range} \u00B7 ${wd} working day${wd!==1?'s':''}</div>
+      ${contact}
+      ${note}
+      ${badge}
+    </div>
+    <div class="job-actions">
+      <div class="when">${when}</div>
+      ${quickBtn}
+    </div>
+  </div>`;
+}
+
+function wireJobCards(container){
+  container.querySelectorAll('.job-item').forEach(el=>{
+    el.onclick=()=>{const j=jobs.find(x=>x.id===el.dataset.id); if(j) openModal(j);};
+  });
+  container.querySelectorAll('.quick-done-btn').forEach(btn=>{
+    btn.onclick=(e)=>{
+      e.stopPropagation();
+      quickSetStatus(btn.dataset.id,btn.dataset.quick);
+    };
+  });
+}
+
+async function quickSetStatus(id,status){
+  const j=jobs.find(x=>x.id===id);
+  if(!j) return;
+  j.status=status;
+  await save();
+  refresh();
+}
+
 function renderJobList(){
   const box=$('jobList');
-  // show jobs that haven't finished yet, soonest first
+  const toggleBtn=$('toggleCompletedBtn');
+  const completedBox=$('completedJobList');
+  // soonest first among jobs that haven't finished yet by date
   const upcoming=jobs
     .filter(j=>j.end>=todayISO)
     .sort((a,b)=>a.start<b.start?-1:a.start>b.start?1:0);
-  if(!upcoming.length){
+  const activeJobs=upcoming.filter(j=>!isFinishedStatus(j.status||'booked'));
+  const completedJobs=upcoming.filter(j=>isFinishedStatus(j.status||'booked'));
+
+  if(!activeJobs.length){
     box.innerHTML='<div class="empty">No jobs on the books yet. Tap an open day or “+ Add job” to start.</div>';
-    return;
+  }else{
+    box.innerHTML=activeJobs.map(renderJobCard).join('');
   }
-  box.innerHTML=upcoming.map(j=>{
-    const s=parse(j.start), e=parse(j.end);
-    const sameMonth=s.getMonth()===e.getMonth();
-    const range = j.start===j.end ? fmt(s)
-      : sameMonth ? `${fmt(s)} \u2013 ${e.getDate()}`
-      : `${fmt(s)} \u2013 ${fmtShort(e)}`;
-    // working days in the job
-    let wd=0; for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)) if(isWorkday(d)) wd++;
-    const active = j.start<=todayISO && j.end>=todayISO;
-    const days=Math.round((parse(j.start)-parse(todayISO))/86400000);
-    let when = active ? 'On now' : days===1 ? 'Tomorrow' : `in ${days} days`;
-    const barCls='bar'+j.color.replace('c','');
-    const note=j.notes?`<div class="jnote">${j.notes.replace(/</g,'&lt;')}</div>`:'';
-    const status=j.status||'booked';
-    const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done',paid:'Paid'};
-    const badge=`<span class="status-badge status-${status}">${statusLabels[status]||status}</span>`;
-    const contactBits=[j.phone,j.address].filter(Boolean);
-    const contact=contactBits.length?`<div class="jnote">${contactBits.join(' \u00B7 ').replace(/</g,'&lt;')}</div>`:'';
-    return `<div class="job-item ${active?'active-now':''}" data-id="${j.id}">
-      <div class="bar ${barCls}"></div>
-      <div class="info">
-        <div class="jn">${j.name.replace(/</g,'&lt;')}</div>
-        <div class="jd">${range} \u00B7 ${wd} working day${wd!==1?'s':''}</div>
-        ${contact}
-        ${note}
-        ${badge}
-      </div>
-      <div class="when">${when}</div>
-    </div>`;
-  }).join('');
-  box.querySelectorAll('.job-item').forEach(el=>{
-    el.onclick=()=>{const j=jobs.find(x=>x.id===el.dataset.id); if(j) openModal(j);};
-  });
+  wireJobCards(box);
+
+  if(completedJobs.length){
+    toggleBtn.style.display='inline-block';
+    toggleBtn.textContent=showCompleted?'Hide completed jobs':`Show completed jobs (${completedJobs.length})`;
+  }else{
+    toggleBtn.style.display='none';
+    showCompleted=false;
+  }
+  completedBox.style.display=showCompleted?'':'none';
+  if(showCompleted){
+    completedBox.innerHTML=completedJobs.map(renderJobCard).join('');
+    wireJobCards(completedBox);
+  }
+
   attachWeatherBadges();
 }
 
@@ -910,8 +978,10 @@ function refresh(){ renderOpenings(); renderCalendar(); renderJobList(); }
 // ---------- profit ledger ----------
 const PROFIT_JOBS_KEY='nspg-profit-jobs-v1';
 const PROFIT_NAMES_KEY='nspg-profit-owner-names-v1';
+const PROFIT_MONTHLY_KEY='nspg-profit-monthly-overrides-v1';
 let profitJobs=[];
 let ownerNames={a:'Sam',b:'Brother',splitA:50,splitB:50};
+let monthlyOverrides={}; // 'YYYY-MM' -> manually entered profit amount, overrides the computed total for that month
 let pEditingId=null;
 let pMaterialRows=[];
 let pLaborRows=[];
@@ -947,7 +1017,80 @@ async function loadProfitData(){
       ownerNames={a:parsed.a||'Sam',b:parsed.b||'Brother',splitA:Number(parsed.splitA)||50,splitB:Number(parsed.splitB)||50};
     }
   }catch(e){ /* keep defaults */ }
+  try{
+    const v3=await Store.get(PROFIT_MONTHLY_KEY);
+    monthlyOverrides=v3?JSON.parse(v3):{};
+  }catch(e){ monthlyOverrides=monthlyOverrides||{}; }
   applyOwnerNames();
+}
+async function saveMonthlyOverrides(){
+  try{ await Store.set(PROFIT_MONTHLY_KEY,JSON.stringify(monthlyOverrides)); }catch(e){}
+}
+
+function monthKey(dateStr){ return (dateStr||'').slice(0,7); } // 'YYYY-MM-DD' -> 'YYYY-MM'
+function monthLabel(key){
+  const [y,m]=key.split('-').map(Number);
+  const mon=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${mon[m-1]} ${y}`;
+}
+function computedMonthlyTotals(){
+  const totals={};
+  profitJobs.forEach(job=>{
+    const key=monthKey(job.date);
+    if(!key) return;
+    const f=pJobFinancials(job);
+    if(!totals[key]) totals[key]={revenue:0,materials:0,labor:0,profit:0};
+    totals[key].revenue+=f.revenue; totals[key].materials+=f.materials; totals[key].labor+=f.labor; totals[key].profit+=f.profit;
+  });
+  return totals;
+}
+function effectiveMonthProfit(key,computedProfit){
+  const override=monthlyOverrides[key];
+  return (override!=null && override!=='') ? Number(override) : computedProfit;
+}
+
+function renderMonthlyTotals(){
+  const wrap=$('monthlyList');
+  const computed=computedMonthlyTotals();
+  const keys=new Set([...Object.keys(computed),...Object.keys(monthlyOverrides)]);
+  const sorted=[...keys].sort().reverse();
+  if(!sorted.length){ wrap.innerHTML='<div class="p-empty" style="display:block;">No jobs logged yet.</div>'; return; }
+  wrap.innerHTML=sorted.map(key=>{
+    const c=computed[key]||{revenue:0,materials:0,labor:0,profit:0};
+    const override=monthlyOverrides[key];
+    const isOverridden=override!=null && override!=='';
+    const effective=effectiveMonthProfit(key,c.profit);
+    return `<div class="month-row" data-key="${key}">
+      <div class="month-row-top">
+        <div class="month-row-label">${monthLabel(key)}</div>
+        <div class="month-row-amt ${effective<0?'neg':''}">${pFmt(effective)}</div>
+      </div>
+      <div class="month-row-sub">
+        <span>From jobs: ${pFmt(c.profit)}</span>
+        <input type="number" class="month-override-input" data-key="${key}" placeholder="Set manually" value="${isOverridden?override:''}">
+        ${isOverridden?`<button type="button" class="month-clear-btn" data-key="${key}">Clear override</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.month-override-input').forEach(inp=>{
+    inp.addEventListener('change',async e=>{
+      const key=e.target.dataset.key;
+      const val=e.target.value;
+      if(val===''){ delete monthlyOverrides[key]; }
+      else{ monthlyOverrides[key]=Number(val); }
+      await saveMonthlyOverrides();
+      renderMonthlyTotals();
+      renderProfitSummary();
+    });
+  });
+  wrap.querySelectorAll('.month-clear-btn').forEach(btn=>{
+    btn.onclick=async()=>{
+      delete monthlyOverrides[btn.dataset.key];
+      await saveMonthlyOverrides();
+      renderMonthlyTotals();
+      renderProfitSummary();
+    };
+  });
 }
 async function saveProfitJobs(){
   $('pStatusMsg').textContent='Saving\u2026';
@@ -995,6 +1138,11 @@ function renderProfitSummary(){
   $('pShareB').textContent=pFmt(profit*(ownerNames.splitB/100));
   $('pSumRevenue').textContent='Revenue '+pFmt(revenue);
   $('pSumCosts').textContent='Costs '+pFmt(materials+labor);
+
+  const thisMonthKey=todayISO.slice(0,7);
+  const thisMonthComputed=computedMonthlyTotals()[thisMonthKey];
+  const thisMonthProfit=effectiveMonthProfit(thisMonthKey,thisMonthComputed?thisMonthComputed.profit:0);
+  $('pThisMonth').textContent='This month: '+pFmt(thisMonthProfit);
 }
 
 function renderProfitJobList(){
@@ -1059,7 +1207,7 @@ function renderCrewTotals(){
   wrap.appendChild(inner);
 }
 
-function refreshProfit(){ renderProfitSummary(); renderProfitJobList(); renderCrewTotals(); }
+function refreshProfit(){ renderProfitSummary(); renderProfitJobList(); renderCrewTotals(); renderMonthlyTotals(); }
 
 function openProfitModal(jobId){
   pEditingId=jobId;
@@ -1330,6 +1478,7 @@ $('todayBtn').onclick=()=>{ const n=new Date(); viewYear=n.getFullYear(); viewMo
 $('exportIcsBtn').onclick=exportICS;
 $('exportCsvBtn').onclick=exportProfitCSV;
 $('pPrintBtn').onclick=()=>{ if(pEditingId) printInvoice(pEditingId); };
+$('toggleCompletedBtn').onclick=()=>{ showCompleted=!showCompleted; renderJobList(); };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeProfitModal(); closeNamesModal(); } });
 
 $('tabSchedule').onclick=showScheduleTab;
