@@ -1184,11 +1184,12 @@ function renderProfitJobList(){
     const f=pJobFinancials(job);
     const card=document.createElement('div');
     card.className='p-job';
+    const doneBadge=job.done?'<span class="status-badge status-done">Done</span>':'';
     card.innerHTML=`
       <div class="p-top">
         <div>
           <div class="p-name">${pEscape(job.name||'Untitled job')}</div>
-          <div class="p-meta">${job.date?pFormatDate(job.date):'No date'}</div>
+          <div class="p-meta">${job.date?pFormatDate(job.date):'No date'} ${doneBadge}</div>
         </div>
         <div class="p-profit">
           <div class="plbl">Profit</div>
@@ -1200,10 +1201,36 @@ function renderProfitJobList(){
         <span>Expenses <b>${pFmt(f.materials)}</b></span>
         <span>Labor <b>${pFmt(f.labor)}</b></span>
       </div>
+      <div style="margin-top:10px;">
+        <button type="button" class="quick-done-btn p-done-toggle" data-id="${job.id}">${job.done?'Mark not done':'Mark done'}</button>
+      </div>
     `;
     card.addEventListener('click',()=>openProfitModal(job.id));
+    card.querySelector('.p-done-toggle').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      toggleProfitJobDone(job.id);
+    });
     list.appendChild(card);
   });
+}
+
+async function toggleProfitJobDone(jobId){
+  const job=profitJobs.find(j=>j.id===jobId);
+  if(!job) return;
+  job.done=!job.done;
+  // Best-effort: the Schedule tab is a separate list of jobs (no shared id
+  // with the Profit Ledger), so keep them in sync by matching on name.
+  if(job.done){
+    const name=(job.name||'').trim().toLowerCase();
+    const match=jobs.find(j=>j.name.trim().toLowerCase()===name && !isFinishedStatus(j.status||'booked'));
+    if(match){
+      match.status='done';
+      await save();
+      refresh();
+    }
+  }
+  await saveProfitJobs();
+  refreshProfit();
 }
 
 function renderCrewTotals(){
