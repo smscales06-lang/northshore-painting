@@ -204,6 +204,9 @@
   .month-override-input{width:90px;background:var(--slate);border:1px solid var(--line);border-radius:8px;color:var(--cream);padding:6px 8px;font-family:inherit;font-size:13px}
   .month-override-input:focus{outline:none;border-color:var(--teal)}
   .month-clear-btn{background:none;border:none;color:var(--teal);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0}
+  .field-search{width:100%;background:var(--slate);border:1px solid var(--line);border-radius:9px;color:var(--cream);padding:10px 12px;font-family:inherit;font-size:15px;margin-bottom:12px}
+  .field-search:focus{outline:none;border-color:var(--teal)}
+  .follow-up-badge{background:#3a2a12;color:#e0a84a}
   .p-split{display:flex;border-top:1px dashed var(--line);padding-top:12px;position:relative}
   .p-split::after{content:"";position:absolute;top:12px;bottom:0;left:50%;border-left:1px dashed var(--line)}
   .p-col{flex:1;text-align:center}
@@ -271,6 +274,22 @@
 </style>
 </head>
 <body>
+  <div class="scrim show" id="authGate">
+    <div class="modal" id="authModal">
+      <h3 id="authTitle">Sign in</h3>
+      <div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input id="authPassword" type="password" autocomplete="current-password"></div>
+      <div class="err" id="authErr"></div>
+      <div class="actions">
+        <button class="btn-save" id="authSubmitBtn" type="button" style="width:100%;">Sign in</button>
+      </div>
+      <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--cream-dim);">
+        <span id="authToggleText">Need an account?</span> <a href="#" id="authToggleLink" style="color:var(--teal);">Create one</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="appRoot" style="display:none;">
   <header class="app">
     <div class="brand">
       <h1>Job Schedule</h1>
@@ -278,6 +297,10 @@
     </div>
     <button class="add-btn" id="addBtn" type="button">+ Add job</button>
   </header>
+
+  <div style="text-align:right;margin-bottom:10px;">
+    <a href="#" id="logoutBtn" style="font-size:12px;color:var(--cream-dim);text-decoration:underline;">Log out</a>
+  </div>
 
   <div class="tabbar">
     <button class="tab-btn active" id="tabSchedule" type="button">Schedule</button>
@@ -315,6 +338,7 @@
       <h2 style="margin-bottom:0;">Upcoming jobs</h2>
       <button class="export-btn" id="exportIcsBtn" type="button">Export calendar (.ics)</button>
     </div>
+    <input id="jobSearch" type="text" class="field-search" placeholder="Search jobs by name...">
     <div id="jobList"></div>
     <button class="export-btn" id="toggleCompletedBtn" type="button" style="margin-top:12px;display:none;"></button>
     <div id="completedJobList" style="margin-top:10px;display:none;"></div>
@@ -330,7 +354,7 @@
         <div class="p-col"><div class="who" id="pNameB">Brother</div><div class="amt" id="pShareB">$0</div></div>
       </div>
       <div class="p-sub"><span id="pSumRevenue">Revenue $0</span><span id="pSumCosts">Costs $0</span></div>
-      <div class="p-sub" style="margin-top:6px;"><span id="pThisMonth">This month: $0</span></div>
+      <div class="p-sub" style="margin-top:6px;"><span id="pThisMonth">This month: $0</span><span id="pYearToDate">YTD: $0</span></div>
     </div>
 
     <div class="crew-title" style="display:block;">Monthly totals</div>
@@ -346,6 +370,7 @@
         <button class="add-btn add-btn-sm" id="pAddBtn" type="button">+ Add a job</button>
       </div>
     </div>
+    <input id="profitJobSearch" type="text" class="field-search" placeholder="Search jobs by name...">
     <div id="pJobList"></div>
     <div class="p-empty" id="pEmptyState">No jobs yet. Tap &quot;+ Add a job&quot; to log your first one.</div>
     <div class="p-status" id="pStatusMsg"></div>
@@ -470,6 +495,8 @@
     </div>
   </div>
 
+  </div>
+
 <script>
 const STORE_KEY='nspg-jobs-v1';
 let jobsRev=0, profitRev=0;
@@ -526,20 +553,137 @@ const CLOUD_REACHABLE = typeof location!=='undefined' && location.protocol!=='fi
 // save locally only and clearly warn, until a real read succeeds.
 const cloudReadConfirmed = {};
 
+// ---------- auth ----------
+// Talks directly to Supabase's auth REST endpoints (no added library, same
+// minimal-dependency style as the rest of this file). A signed-in session's
+// access token is attached to every Store request so the RLS policies on
+// nspg_store can require `to authenticated` instead of being wide open.
+const AUTH_SESSION_KEY='nspg-auth-session-v1';
+let authSession=null;
+let authMode='signin';
+let authResolve=null;
+
+function loadAuthSessionFromStorage(){
+  try{
+    const raw=localStorage.getItem(AUTH_SESSION_KEY);
+    return raw?JSON.parse(raw):null;
+  }catch(e){ return null; }
+}
+function persistAuthSession(session){
+  authSession=session;
+  try{ localStorage.setItem(AUTH_SESSION_KEY,JSON.stringify(session)); }catch(e){}
+}
+function clearAuthSession(){
+  authSession=null;
+  try{ localStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+}
+function authHeader(){
+  return authSession ? {Authorization:`Bearer ${authSession.access_token}`} : {};
+}
+
+async function authRequest(path,body){
+  let r;
+  try{
+    r=await fetch(`${SUPABASE_URL}/auth/v1/${path}`,{
+      method:'POST',
+      headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+  }catch(e){
+    throw new Error('Could not reach the server. Check your connection and try again.');
+  }
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok){
+    const msg=(data&&(data.error_description||data.msg||data.error))||'Something went wrong.';
+    throw new Error(msg);
+  }
+  return data;
+}
+function toSession(data){
+  return {access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+((data.expires_in||3600)*1000)};
+}
+async function signIn(email,password){
+  const data=await authRequest('token?grant_type=password',{email,password});
+  persistAuthSession(toSession(data));
+}
+async function signUp(email,password){
+  const data=await authRequest('signup',{email,password});
+  if(data.access_token){ persistAuthSession(toSession(data)); return true; }
+  return false; // email confirmation required before a session exists
+}
+async function refreshAuthSession(){
+  const stored=authSession||loadAuthSessionFromStorage();
+  if(!stored||!stored.refresh_token) return false;
+  try{
+    const data=await authRequest('token?grant_type=refresh_token',{refresh_token:stored.refresh_token});
+    persistAuthSession(toSession(data));
+    return true;
+  }catch(e){
+    clearAuthSession();
+    return false;
+  }
+}
+
+function applyAuthMode(){
+  if(authMode==='signup'){
+    $('authTitle').textContent='Create account';
+    $('authSubmitBtn').textContent='Create account';
+    $('authToggleText').textContent='Already have an account?';
+    $('authToggleLink').textContent='Sign in';
+  }else{
+    $('authTitle').textContent='Sign in';
+    $('authSubmitBtn').textContent='Sign in';
+    $('authToggleText').textContent='Need an account?';
+    $('authToggleLink').textContent='Create one';
+  }
+}
+function showAuthGate(mode){
+  authMode=mode||'signin';
+  applyAuthMode();
+  $('authErr').textContent='';
+  $('authGate').classList.add('show');
+  $('appRoot').style.display='none';
+}
+function hideAuthGate(){
+  $('authGate').classList.remove('show');
+  $('appRoot').style.display='';
+}
+function initAuth(){
+  return new Promise(async(resolve)=>{
+    authResolve=resolve;
+    const stored=loadAuthSessionFromStorage();
+    if(stored){
+      authSession=stored;
+      if(stored.expires_at && stored.expires_at>Date.now()+60000){
+        hideAuthGate(); resolve(); return;
+      }
+      const ok=await refreshAuthSession();
+      if(ok){ hideAuthGate(); resolve(); return; }
+    }
+    showAuthGate('signin');
+  });
+}
+
 const Store={
   async cloudGet(key){
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/nspg_store?key=eq.${encodeURIComponent(key)}&select=value`,
-      {headers:{apikey:SUPABASE_KEY,Accept:'application/json'}});
+    const doFetch=()=>fetch(`${SUPABASE_URL}/rest/v1/nspg_store?key=eq.${encodeURIComponent(key)}&select=value`,
+      {headers:{apikey:SUPABASE_KEY,Accept:'application/json',...authHeader()}});
+    let r=await doFetch();
+    if(r.status===401 && await refreshAuthSession()) r=await doFetch();
+    if(r.status===401){ showAuthGate('signin'); throw new Error('cloud get 401'); }
     if(!r.ok) throw new Error('cloud get '+r.status);
     const rows=await r.json();
     return rows&&rows[0]?rows[0].value:null;
   },
   async cloudSet(key,v){
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/nspg_store`,{
+    const doFetch=()=>fetch(`${SUPABASE_URL}/rest/v1/nspg_store`,{
       method:'POST',
-      headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates',...authHeader()},
       body:JSON.stringify([{key,value:v}])
     });
+    let r=await doFetch();
+    if(r.status===401 && await refreshAuthSession()) r=await doFetch();
+    if(r.status===401){ showAuthGate('signin'); throw new Error('cloud set 401'); }
     if(!r.ok) throw new Error('cloud set '+r.status);
   },
   async get(key){
@@ -674,6 +818,11 @@ function renderJobCard(j){
   const status=j.status||'booked';
   const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done',paid:'Paid'};
   const badge=`<span class="status-badge status-${status}">${statusLabels[status]||status}</span>`;
+  let followUpBadge='';
+  if(status==='quoted' && j.createdAt){
+    const daysSinceQuoted=Math.round((Date.now()-new Date(j.createdAt).getTime())/86400000);
+    if(daysSinceQuoted>=14) followUpBadge=`<span class="status-badge follow-up-badge">Follow up — quoted ${daysSinceQuoted}d ago</span>`;
+  }
   const contactBits=[j.phone,j.address].filter(Boolean);
   const contact=contactBits.length?`<div class="jnote">${contactBits.join(' \u00B7 ').replace(/</g,'&lt;')}</div>`:'';
   const finished=isFinishedStatus(status);
@@ -688,6 +837,7 @@ function renderJobCard(j){
       ${contact}
       ${note}
       ${badge}
+      ${followUpBadge}
     </div>
     <div class="job-actions">
       <div class="when">${when}</div>
@@ -720,15 +870,19 @@ function renderJobList(){
   const box=$('jobList');
   const toggleBtn=$('toggleCompletedBtn');
   const completedBox=$('completedJobList');
+  const query=($('jobSearch').value||'').trim().toLowerCase();
   // soonest first among jobs that haven't finished yet by date
-  const upcoming=jobs
+  let upcoming=jobs
     .filter(j=>j.end>=todayISO)
     .sort((a,b)=>a.start<b.start?-1:a.start>b.start?1:0);
+  if(query) upcoming=upcoming.filter(j=>j.name.toLowerCase().includes(query));
   const activeJobs=upcoming.filter(j=>!isFinishedStatus(j.status||'booked'));
   const completedJobs=upcoming.filter(j=>isFinishedStatus(j.status||'booked'));
 
   if(!activeJobs.length){
-    box.innerHTML='<div class="empty">No jobs on the books yet. Tap an open day or “+ Add job” to start.</div>';
+    box.innerHTML=query
+      ? `<div class="empty">No jobs matching "${query.replace(/</g,'&lt;')}".</div>`
+      : '<div class="empty">No jobs on the books yet. Tap an open day or “+ Add job” to start.</div>';
   }else{
     box.innerHTML=activeJobs.map(renderJobCard).join('');
   }
@@ -964,7 +1118,7 @@ async function saveJob(){
   if(editingId){
     const j=jobs.find(x=>x.id===editingId); Object.assign(j,data);
   }else{
-    jobs.push({id:Date.now()+''+Math.floor(Math.random()*999),...data});
+    jobs.push({id:Date.now()+''+Math.floor(Math.random()*999),createdAt:new Date().toISOString(),...data});
   }
   await save(); closeModal(); refresh();
 }
@@ -1143,6 +1297,13 @@ function renderProfitSummary(){
   const thisMonthComputed=computedMonthlyTotals()[thisMonthKey];
   const thisMonthProfit=effectiveMonthProfit(thisMonthKey,thisMonthComputed?thisMonthComputed.profit:0);
   $('pThisMonth').textContent='This month: '+pFmt(thisMonthProfit);
+
+  const currentYear=todayISO.slice(0,4);
+  const computedAll=computedMonthlyTotals();
+  const yearKeys=new Set([...Object.keys(computedAll),...Object.keys(monthlyOverrides)].filter(k=>k.startsWith(currentYear)));
+  let ytd=0;
+  yearKeys.forEach(key=>{ ytd+=effectiveMonthProfit(key,computedAll[key]?computedAll[key].profit:0); });
+  $('pYearToDate').textContent='YTD: '+pFmt(ytd);
 }
 
 function renderProfitJobList(){
@@ -1151,7 +1312,13 @@ function renderProfitJobList(){
   list.innerHTML='';
   if(profitJobs.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
-  const sorted=[...profitJobs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const query=($('profitJobSearch').value||'').trim().toLowerCase();
+  let sorted=[...profitJobs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(query) sorted=sorted.filter(job=>(job.name||'').toLowerCase().includes(query));
+  if(!sorted.length){
+    list.innerHTML=`<div class="p-empty" style="display:block;">No jobs matching "${pEscape(query)}".</div>`;
+    return;
+  }
   sorted.forEach(job=>{
     const f=pJobFinancials(job);
     const card=document.createElement('div');
@@ -1476,6 +1643,8 @@ $('prev').onclick=()=>{ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} r
 $('next').onclick=()=>{ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); };
 $('todayBtn').onclick=()=>{ const n=new Date(); viewYear=n.getFullYear(); viewMonth=n.getMonth(); renderCalendar(); };
 $('exportIcsBtn').onclick=exportICS;
+$('jobSearch').addEventListener('input',renderJobList);
+$('profitJobSearch').addEventListener('input',renderProfitJobList);
 $('exportCsvBtn').onclick=exportProfitCSV;
 $('pPrintBtn').onclick=()=>{ if(pEditingId) printInvoice(pEditingId); };
 $('toggleCompletedBtn').onclick=()=>{ showCompleted=!showCompleted; renderJobList(); };
@@ -1514,11 +1683,44 @@ $('namesSaveBtn').onclick=async()=>{
   closeNamesModal();
 };
 
+// ---------- auth events ----------
+$('authToggleLink').onclick=(e)=>{ e.preventDefault(); showAuthGate(authMode==='signin'?'signup':'signin'); };
+$('authSubmitBtn').onclick=async()=>{
+  const email=$('authEmail').value.trim();
+  const password=$('authPassword').value;
+  if(!email||!password){ $('authErr').textContent='Enter both email and password.'; return; }
+  $('authErr').textContent='';
+  $('authSubmitBtn').disabled=true;
+  try{
+    if(authMode==='signin'){
+      await signIn(email,password);
+      hideAuthGate();
+      if(authResolve){ authResolve(); authResolve=null; }
+    }else{
+      const loggedIn=await signUp(email,password);
+      if(loggedIn){
+        hideAuthGate();
+        if(authResolve){ authResolve(); authResolve=null; }
+      }else{
+        showAuthGate('signin');
+        $('authErr').textContent='Account created — check your email to confirm it, then sign in.';
+      }
+    }
+  }catch(e){
+    $('authErr').textContent=e.message||'Something went wrong.';
+  }finally{
+    $('authSubmitBtn').disabled=false;
+  }
+};
+$('authPassword').addEventListener('keydown',e=>{ if(e.key==='Enter') $('authSubmitBtn').click(); });
+$('logoutBtn').onclick=(e)=>{ e.preventDefault(); clearAuthSession(); showAuthGate('signin'); };
+
 // ---------- init ----------
 (async()=>{
   const n=new Date(); viewYear=n.getFullYear(); viewMonth=n.getMonth();
-  await load();
   $('ckStart').value=todayISO; $('ckEnd').value=todayISO;
+  await initAuth();
+  await load();
   refresh();
   await loadProfitData();
   refreshProfit();
