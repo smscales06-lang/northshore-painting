@@ -20,6 +20,9 @@
 <!-- Map (job locations tab) - free, no API key -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   :root{
     --slate:#10212e;        /* deep slate-navy bg */
@@ -140,6 +143,7 @@
   .leaflet-container a.leaflet-popup-close-button{color:var(--cream-dim)}
   .leaflet-control-attribution{background:rgba(16,33,46,.75)!important;color:var(--cream-dim)!important}
   .leaflet-control-attribution a{color:var(--teal)!important}
+  .cluster-dot{display:flex;align-items:center;justify-content:center;background:var(--teal);color:#05151a;border-radius:50%;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-size:13px;box-shadow:0 0 0 4px rgba(47,182,171,.25)}
 
   /* ── iPhone / narrow screens ── */
   @media(max-width:480px){
@@ -880,9 +884,20 @@ function queuedGeocode(address){
 }
 
 let map=null;
+let clusterGroup=null;
 let mapMarkers=[];
 let mapPinsRendering=false;
 const MAP_STATUS_COLORS={quoted:'#e0a050',booked:'#9fb1b8','in-progress':'#2fb6ab',done:'#7fd9b8'};
+
+function clusterIcon(cluster){
+  const count=cluster.getChildCount();
+  const size=count<10?34:count<50?42:50;
+  return L.divIcon({
+    html:`<div class="cluster-dot" style="width:${size}px;height:${size}px;">${count}</div>`,
+    className:'',
+    iconSize:L.point(size,size)
+  });
+}
 
 function initMap(){
   if(map || typeof L==='undefined'){
@@ -895,9 +910,17 @@ function initMap(){
       maxZoom:19,
       attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
+    // Group nearby pins into a count bubble so you can see at a glance how
+    // many jobs are in an area, not just where - falls back to plain pins
+    // if this plugin didn't load for any reason.
+    if(typeof L.markerClusterGroup==='function'){
+      clusterGroup=L.markerClusterGroup({maxClusterRadius:60,iconCreateFunction:clusterIcon});
+      map.addLayer(clusterGroup);
+    }
     setTimeout(()=>{ if(map) map.invalidateSize(); },60);
   }catch(e){
     map=null;
+    clusterGroup=null;
     $('mapUnavailable').style.display='block';
   }
 }
@@ -908,7 +931,8 @@ async function renderMapPins(){
   try{
     const addressedJobs=jobs.filter(j=>j.address&&j.address.trim());
     $('mapEmptyState').style.display=addressedJobs.length?'none':'block';
-    mapMarkers.forEach(m=>map.removeLayer(m));
+    if(clusterGroup) clusterGroup.clearLayers();
+    else mapMarkers.forEach(m=>map.removeLayer(m));
     mapMarkers=[];
     const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done'};
     for(const j of addressedJobs){
@@ -916,10 +940,12 @@ async function renderMapPins(){
       if(!loc) continue;
       const status=normalizeStatus(j.status);
       const color=MAP_STATUS_COLORS[status]||MAP_STATUS_COLORS.booked;
-      const marker=L.circleMarker([loc.lat,loc.lon],{radius:9,color:'#0b1822',weight:2,fillColor:color,fillOpacity:.9}).addTo(map);
+      const marker=L.circleMarker([loc.lat,loc.lon],{radius:9,color:'#0b1822',weight:2,fillColor:color,fillOpacity:.9});
       const s=parse(j.start), e=parse(j.end);
       const dateRange=j.start===j.end?fmtShort(s):`${fmtShort(s)} – ${fmtShort(e)}`;
       marker.bindPopup(`<div class="map-popup-name">${pEscape(j.name||'Untitled job')}</div><div class="map-popup-meta">${dateRange} · ${statusLabels[status]||status}</div>`);
+      if(clusterGroup) clusterGroup.addLayer(marker);
+      else marker.addTo(map);
       mapMarkers.push(marker);
     }
   }finally{
