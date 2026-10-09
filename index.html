@@ -17,6 +17,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Map (job locations tab) - free, no API key -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
     --slate:#10212e;        /* deep slate-navy bg */
@@ -124,6 +127,19 @@
   .skel-job{height:68px;margin-bottom:9px}
   .skel-text{color:var(--cream-dim);font-size:13px;text-align:center;padding:26px 0}
   @media (prefers-reduced-motion:reduce){ .skel{animation:none} }
+
+  /* Map tab */
+  #mapContainer{height:min(60vh,480px);width:100%;background:var(--slate)}
+  .map-legend{display:flex;flex-wrap:wrap;gap:14px;padding:12px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--cream-dim)}
+  .map-legend span{display:inline-flex;align-items:center;gap:6px}
+  .map-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--slate-2);color:var(--cream)}
+  .leaflet-popup-content{margin:12px 14px;font-family:'Inter',system-ui,sans-serif}
+  .map-popup-name{font-weight:600;font-size:14px;margin-bottom:3px}
+  .map-popup-meta{font-size:12px;color:var(--cream-dim)}
+  .leaflet-container a.leaflet-popup-close-button{color:var(--cream-dim)}
+  .leaflet-control-attribution{background:rgba(16,33,46,.75)!important;color:var(--cream-dim)!important}
+  .leaflet-control-attribution a{color:var(--teal)!important}
 
   /* ── iPhone / narrow screens ── */
   @media(max-width:480px){
@@ -290,7 +306,6 @@
   .status-booked{background:var(--slate-3);color:var(--cream-dim)}
   .status-in-progress{background:#1f3a4d;color:var(--teal)}
   .status-done{background:var(--open);color:#7fd9b8}
-  .status-paid{background:var(--teal-dim);color:#eafff9}
   .rain-badge{background:#3a2020;color:#e08a7a;margin-left:6px}
 
   /* export / print buttons */
@@ -311,6 +326,7 @@
 
   <div class="tabbar">
     <button class="tab-btn active" id="tabSchedule" type="button">Schedule</button>
+    <button class="tab-btn" id="tabMap" type="button">Map</button>
     <button class="tab-btn" id="tabProfit" type="button">Profit Ledger</button>
   </div>
 
@@ -350,6 +366,20 @@
     <button class="export-btn" id="toggleCompletedBtn" type="button" style="margin-top:12px;display:none;"></button>
     <div id="completedJobList" style="margin-top:10px;display:none;"></div>
   </section>
+  </div>
+
+  <div id="mapView" style="display:none;">
+    <section class="openings" style="padding:0;overflow:hidden;">
+      <div id="mapContainer"></div>
+      <div class="map-legend">
+        <span><i class="map-dot" style="background:#e0a050;"></i>Quoted</span>
+        <span><i class="map-dot" style="background:var(--cream-dim);"></i>Booked</span>
+        <span><i class="map-dot" style="background:var(--teal);"></i>In progress</span>
+        <span><i class="map-dot" style="background:#7fd9b8;"></i>Done</span>
+      </div>
+    </section>
+    <div class="empty" id="mapEmptyState" style="display:none;margin-top:14px;">No job locations yet. Add an address when creating or editing a job to see it pinned here.</div>
+    <div class="empty" id="mapUnavailable" style="display:none;margin-top:14px;">Map couldn't load. Check your connection and reload the page.</div>
   </div>
 
   <div id="profitView" style="display:none;">
@@ -474,7 +504,6 @@
           <option value="booked">Booked</option>
           <option value="in-progress">In progress</option>
           <option value="done">Done</option>
-          <option value="paid">Paid</option>
         </select>
       </div>
       <div class="row2">
@@ -701,7 +730,11 @@ const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','De
 const fmt=d=>`${DOW[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}`;
 const fmtShort=d=>`${MON[d.getMonth()]} ${d.getDate()}`;
 
-function isFinishedStatus(status){ return status==='done'||status==='paid'; }
+// "Paid" used to be its own status; now Done implies paid, so treat any
+// job saved with the old "paid" value as Done everywhere (display and
+// logic) without needing to rewrite existing stored data.
+function normalizeStatus(status){ return status==='paid' ? 'done' : (status||'booked'); }
+function isFinishedStatus(status){ return normalizeStatus(status)==='done'; }
 
 function renderJobCard(j){
   const s=parse(j.start), e=parse(j.end);
@@ -716,8 +749,8 @@ function renderJobCard(j){
   let when = active ? 'On now' : days===1 ? 'Tomorrow' : `in ${days} days`;
   const barCls='bar'+j.color.replace('c','');
   const note=j.notes?`<div class="jnote">${j.notes.replace(/</g,'&lt;')}</div>`:'';
-  const status=j.status||'booked';
-  const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done',paid:'Paid'};
+  const status=normalizeStatus(j.status);
+  const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done'};
   const badge=`<span class="status-badge status-${status}">${statusLabels[status]||status}</span>`;
   let followUpBadge='';
   if(status==='quoted' && j.createdAt){
@@ -803,6 +836,95 @@ function renderJobList(){
   }
 
   attachWeatherBadges();
+}
+
+// ---------- map (job locations - best-effort, no API key) ----------
+// Uses Leaflet + OpenStreetMap tiles (no key) and OSM's free Nominatim
+// geocoder for turning a job's typed address into a pin. Geocode results
+// are cached in localStorage since addresses never move, and lookups are
+// queued with a short delay between each to stay well within Nominatim's
+// free-tier usage policy. Like the weather feature, any failure here
+// (map library didn't load, address doesn't geocode, offline) just means
+// fewer/no pins - never an error that blocks the rest of the app.
+const MAP_GEOCODE_CACHE_KEY='nspg-nominatim-cache-v1';
+let geocodeCache={};
+try{
+  const rawGeoCache=localStorage.getItem(MAP_GEOCODE_CACHE_KEY);
+  if(rawGeoCache) geocodeCache=JSON.parse(rawGeoCache);
+}catch(e){ geocodeCache={}; }
+function saveGeocodeCache(){
+  try{ localStorage.setItem(MAP_GEOCODE_CACHE_KEY,JSON.stringify(geocodeCache)); }catch(e){}
+}
+let geocodeQueue=Promise.resolve();
+async function nominatimGeocode(address){
+  const key=address.trim().toLowerCase();
+  if(!key) return null;
+  if(key in geocodeCache) return geocodeCache[key];
+  let loc=null, succeeded=false;
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(address)}`);
+    if(!r.ok) throw new Error('geocode failed');
+    const results=await r.json();
+    const hit=results&&results[0];
+    loc=hit?{lat:parseFloat(hit.lat),lon:parseFloat(hit.lon)}:null;
+    succeeded=true;
+  }catch(e){ /* network/API failure - don't cache a negative, allow retry later */ }
+  if(succeeded){ geocodeCache[key]=loc; saveGeocodeCache(); }
+  await new Promise(res=>setTimeout(res,1100)); // stay well under ~1 req/sec
+  return loc;
+}
+function queuedGeocode(address){
+  const result=geocodeQueue.then(()=>nominatimGeocode(address));
+  geocodeQueue=result.catch(()=>null);
+  return result;
+}
+
+let map=null;
+let mapMarkers=[];
+let mapPinsRendering=false;
+const MAP_STATUS_COLORS={quoted:'#e0a050',booked:'#9fb1b8','in-progress':'#2fb6ab',done:'#7fd9b8'};
+
+function initMap(){
+  if(map || typeof L==='undefined'){
+    if(typeof L==='undefined') $('mapUnavailable').style.display='block';
+    return;
+  }
+  try{
+    map=L.map('mapContainer',{attributionControl:true}).setView([41.8781,-87.6298],10); // Chicago
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19,
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    setTimeout(()=>{ if(map) map.invalidateSize(); },60);
+  }catch(e){
+    map=null;
+    $('mapUnavailable').style.display='block';
+  }
+}
+
+async function renderMapPins(){
+  if(!map || mapPinsRendering) return;
+  mapPinsRendering=true;
+  try{
+    const addressedJobs=jobs.filter(j=>j.address&&j.address.trim());
+    $('mapEmptyState').style.display=addressedJobs.length?'none':'block';
+    mapMarkers.forEach(m=>map.removeLayer(m));
+    mapMarkers=[];
+    const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done'};
+    for(const j of addressedJobs){
+      const loc=await queuedGeocode(j.address);
+      if(!loc) continue;
+      const status=normalizeStatus(j.status);
+      const color=MAP_STATUS_COLORS[status]||MAP_STATUS_COLORS.booked;
+      const marker=L.circleMarker([loc.lat,loc.lon],{radius:9,color:'#0b1822',weight:2,fillColor:color,fillOpacity:.9}).addTo(map);
+      const s=parse(j.start), e=parse(j.end);
+      const dateRange=j.start===j.end?fmtShort(s):`${fmtShort(s)} – ${fmtShort(e)}`;
+      marker.bindPopup(`<div class="map-popup-name">${pEscape(j.name||'Untitled job')}</div><div class="map-popup-meta">${dateRange} · ${statusLabels[status]||status}</div>`);
+      mapMarkers.push(marker);
+    }
+  }finally{
+    mapPinsRendering=false;
+  }
 }
 
 // ---------- weather (best-effort rain-risk flag on upcoming jobs with an address) ----------
@@ -988,7 +1110,7 @@ function openModal(job,prefillDate){
   $('fName').value = job?job.name:'';
   $('fStart').value = job?job.start:(prefillDate||todayISO);
   $('fEnd').value = job?job.end:(prefillDate||todayISO);
-  $('fStatus').value = job?(job.status||'booked'):'booked';
+  $('fStatus').value = job?normalizeStatus(job.status):'booked';
   $('fPhone').value = job?(job.phone||''):'';
   $('fEmail').value = job?(job.email||''):'';
   $('fAddress').value = job?(job.address||''):'';
@@ -1028,7 +1150,7 @@ async function deleteJob(){
   jobs=jobs.filter(j=>j.id!==editingId);
   await save(); closeModal(); refresh();
 }
-function refresh(){ renderOpenings(); renderCalendar(); renderJobList(); }
+function refresh(){ renderOpenings(); renderCalendar(); renderJobList(); if(map) renderMapPins(); }
 
 // ---------- profit ledger ----------
 const PROFIT_JOBS_KEY='nspg-profit-jobs-v1';
@@ -1552,16 +1674,32 @@ function playTabEnter(el){
 }
 function showScheduleTab(){
   $('scheduleView').style.display='';
+  $('mapView').style.display='none';
   $('profitView').style.display='none';
   $('tabSchedule').classList.add('active');
+  $('tabMap').classList.remove('active');
   $('tabProfit').classList.remove('active');
   $('addBtn').style.display='';
   playTabEnter($('scheduleView'));
 }
+function showMapTab(){
+  $('scheduleView').style.display='none';
+  $('mapView').style.display='';
+  $('profitView').style.display='none';
+  $('tabSchedule').classList.remove('active');
+  $('tabMap').classList.add('active');
+  $('tabProfit').classList.remove('active');
+  $('addBtn').style.display='none';
+  playTabEnter($('mapView'));
+  initMap();
+  renderMapPins();
+}
 function showProfitTab(){
   $('scheduleView').style.display='none';
+  $('mapView').style.display='none';
   $('profitView').style.display='';
   $('tabSchedule').classList.remove('active');
+  $('tabMap').classList.remove('active');
   $('tabProfit').classList.add('active');
   $('addBtn').style.display='none';
   playTabEnter($('profitView'));
@@ -1590,6 +1728,7 @@ $('toggleCompletedBtn').onclick=()=>{ showCompleted=!showCompleted; renderJobLis
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeProfitModal(); closeNamesModal(); } });
 
 $('tabSchedule').onclick=showScheduleTab;
+$('tabMap').onclick=showMapTab;
 $('tabProfit').onclick=showProfitTab;
 
 $('pAddBtn').onclick=()=>openProfitModal(null);
