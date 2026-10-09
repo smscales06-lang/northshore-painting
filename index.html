@@ -133,6 +133,11 @@
 
   /* Map tab */
   #mapContainer{height:min(60vh,480px);width:100%;background:var(--slate)}
+  /* Dark, muted look for the (free, no-key) OpenStreetMap tiles - inverting
+     a light map and correcting the hue gives a clean dark theme without
+     depending on a second tile provider. Only the tile pane is filtered,
+     so pins/clusters stay their normal vivid colors on top. */
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.4)}
   .map-legend{display:flex;flex-wrap:wrap;gap:14px;padding:12px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--cream-dim)}
   .map-legend span{display:inline-flex;align-items:center;gap:6px}
   .map-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
@@ -1022,12 +1027,14 @@ function initMap(){
   }
   try{
     map=L.map('mapContainer',{attributionControl:true}).setView([41.8781,-87.6298],10); // Chicago
-    // Plain dark street map (CARTO Dark Matter) - clean and low on clutter,
-    // matches the app's own dark theme. Never satellite imagery.
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    // Standard OpenStreetMap tiles - the one tile source that's reliably
+    // free with no API key, ever. The dark/clean look comes from a CSS
+    // filter on the tile pane (see .leaflet-tile-pane below) instead of a
+    // second tile provider, since those free tiers can change without
+    // notice. Never satellite imagery.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
       maxZoom:19,
-      subdomains:'abcd',
-      attribution:'&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     // Group nearby pins into a count bubble so you can see at a glance how
     // many jobs are in an area, not just where - falls back to plain pins
