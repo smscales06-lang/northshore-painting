@@ -34,6 +34,17 @@
     --shadow:0 10px 40px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  button{transition:transform .12s ease,opacity .15s ease,background .15s ease}
+  button:active{transform:scale(.96)}
+  button:disabled{opacity:.6;cursor:default;transform:none!important}
+  @keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .job-item,.p-job,.month-row,.open-card{animation:cardIn .28s cubic-bezier(.22,.9,.3,1) both}
+  @keyframes tabIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .tab-enter{animation:tabIn .28s cubic-bezier(.22,.9,.3,1)}
+  @media (prefers-reduced-motion:reduce){
+    .job-item,.p-job,.month-row,.open-card,.tab-enter{animation:none}
+    button{transition:none}
+  }
   html,body{background:var(--slate);color:var(--cream);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
   body{padding:calc(clamp(14px,3vw,32px) + env(safe-area-inset-top)) clamp(14px,3vw,32px) clamp(14px,3vw,32px);max-width:1080px;margin:0 auto;min-height:100vh}
 
@@ -41,6 +52,11 @@
   .brand{display:flex;flex-direction:column;gap:2px}
   .brand h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(22px,4.4vw,30px);letter-spacing:-.01em;line-height:1}
   .brand .sub{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);font-weight:600}
+  .sync-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--cream-dim);margin-top:3px}
+  .sync-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .sync-dot-on{background:var(--teal);box-shadow:0 0 6px var(--teal)}
+  .sync-dot-warn{background:#e0a050;box-shadow:0 0 6px #e0a050}
+  .sync-dot-off{background:var(--cream-dim)}
   .add-btn{background:var(--teal);color:#05151a;border:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px;cursor:pointer;font-family:inherit;transition:transform .12s ease,background .15s ease}
   .add-btn:hover{background:#3fd0c4}
   .add-btn:active{transform:scale(.97)}
@@ -101,6 +117,14 @@
   .joblist .empty{color:var(--cream-dim);font-size:14px;padding:14px 2px;border:1px dashed var(--line);border-radius:12px;text-align:center}
   .bar0{background:#2fb6ab}.bar1{background:#e0a050}.bar2{background:#d98ca0}.bar3{background:#8ab4e0}.bar4{background:#9fc46a}.bar5{background:#c79bd8}
 
+  /* Loading skeletons - shown until the first cloud/local read resolves */
+  @keyframes skelShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .skel{background:linear-gradient(110deg,var(--slate-2) 30%,var(--slate-3) 50%,var(--slate-2) 70%);background-size:200% 100%;animation:skelShimmer 1.6s ease-in-out infinite;border-radius:12px}
+  .skel-card{flex:0 0 auto;width:128px;height:72px}
+  .skel-job{height:68px;margin-bottom:9px}
+  .skel-text{color:var(--cream-dim);font-size:13px;text-align:center;padding:26px 0}
+  @media (prefers-reduced-motion:reduce){ .skel{animation:none} }
+
   /* ── iPhone / narrow screens ── */
   @media(max-width:480px){
     body{padding:calc(14px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom))}
@@ -159,11 +183,13 @@
   .c0{background:#2fb6ab}.c1{background:#e0a050}.c2{background:#d98ca0}.c3{background:#8ab4e0}.c4{background:#9fc46a}.c5{background:#c79bd8}
 
   /* Modal */
-  .scrim{position:fixed;inset:0;background:rgba(5,12,16,.7);backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;z-index:50}
-  .scrim.show{display:flex}
+  .scrim{position:fixed;inset:0;background:rgba(5,12,16,0);backdrop-filter:blur(0px);display:flex;align-items:flex-end;justify-content:center;z-index:50;visibility:hidden;pointer-events:none;transition:background .22s ease,backdrop-filter .22s ease,visibility 0s linear .22s}
+  .scrim.show{background:rgba(5,12,16,.7);backdrop-filter:blur(3px);visibility:visible;pointer-events:auto;transition:background .22s ease,backdrop-filter .22s ease}
   @media(min-width:560px){.scrim{align-items:center}}
-  .modal{background:var(--slate-2);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:440px;padding:22px;box-shadow:var(--shadow);max-height:92vh;overflow-y:auto}
-  @media(min-width:560px){.modal{border-radius:18px}}
+  .modal{background:var(--slate-2);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:440px;padding:22px;box-shadow:var(--shadow);max-height:92vh;overflow-y:auto;transform:translateY(24px);opacity:0;transition:transform .25s cubic-bezier(.22,.9,.3,1),opacity .2s ease}
+  .scrim.show .modal{transform:translateY(0);opacity:1}
+  @media(min-width:560px){.modal{border-radius:18px;transform:translateY(10px) scale(.98)}.scrim.show .modal{transform:translateY(0) scale(1)}}
+  @media (prefers-reduced-motion:reduce){ .scrim,.scrim.show,.modal,.scrim.show .modal{transition:none} }
   .modal h3{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin-bottom:18px}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;color:var(--cream-dim);margin-bottom:6px;letter-spacing:.03em}
@@ -278,6 +304,7 @@
     <div class="brand">
       <h1>Job Schedule</h1>
       <span class="sub">NorthShore Painting Group</span>
+      <span class="sync-status" id="syncStatus"><span class="sync-dot sync-dot-off"></span>Loading...</span>
     </div>
     <button class="add-btn" id="addBtn" type="button">+ Add job</button>
   </header>
@@ -290,7 +317,7 @@
   <div id="scheduleView">
   <section class="openings">
     <h2><span class="dot"></span> Where you can fit work</h2>
-    <div class="open-row" id="openRow"></div>
+    <div class="open-row" id="openRow"><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div></div>
 
     <div class="checker">
       <div class="ask">
@@ -311,7 +338,7 @@
     </div>
   </div>
   <div class="dow"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid"><div class="skel-text" style="grid-column:1/-1;">Loading calendar...</div></div>
 
   <section class="joblist">
     <div class="cal-head" style="margin-bottom:12px;">
@@ -319,7 +346,7 @@
       <button class="export-btn" id="exportIcsBtn" type="button">Export calendar (.ics)</button>
     </div>
     <input id="jobSearch" type="text" class="field-search" placeholder="Search jobs by name...">
-    <div id="jobList"></div>
+    <div id="jobList"><div class="skel skel-job"></div><div class="skel skel-job"></div></div>
     <button class="export-btn" id="toggleCompletedBtn" type="button" style="margin-top:12px;display:none;"></button>
     <div id="completedJobList" style="margin-top:10px;display:none;"></div>
   </section>
@@ -351,7 +378,7 @@
       </div>
     </div>
     <input id="profitJobSearch" type="text" class="field-search" placeholder="Search jobs by name...">
-    <div id="pJobList"></div>
+    <div id="pJobList"><div class="skel skel-job"></div><div class="skel skel-job"></div></div>
     <div class="p-empty" id="pEmptyState">No jobs yet. Tap &quot;+ Add a job&quot; to log your first one.</div>
     <div class="p-status" id="pStatusMsg"></div>
   </div>
@@ -586,12 +613,24 @@ const Store={
     try{ localStorage.setItem(key,v); }catch(e){ console.error('save failed',e); }
   }
 };
+function updateSyncStatus(){
+  const el=$('syncStatus');
+  if(!el) return;
+  if(!CLOUD){
+    el.innerHTML='<span class="sync-dot sync-dot-off"></span>Local only (no cloud sync configured)';
+  }else if(cloudReadConfirmed[STORE_KEY]){
+    el.innerHTML='<span class="sync-dot sync-dot-on"></span>Synced';
+  }else{
+    el.innerHTML='<span class="sync-dot sync-dot-warn"></span>Working offline - changes saved on this device';
+  }
+}
 async function load(){
   try{
     const v=await Store.get(STORE_KEY);
     const u=unwrapRev(v);
     jobs=u.items||[]; jobsRev=u.rev;
   }catch(e){ jobs=[]; jobsRev=0; }
+  updateSyncStatus();
 }
 async function save(){
   // If we've confirmed what the cloud has this session, re-check right
@@ -609,6 +648,7 @@ async function save(){
   }
   jobsRev+=1;
   await Store.set(STORE_KEY,wrapRev(jobs,jobsRev));
+  updateSyncStatus();
 }
 
 // ---------- helpers ----------
@@ -1505,12 +1545,18 @@ function printInvoice(jobId){
 }
 
 // ---------- tabs ----------
+function playTabEnter(el){
+  el.classList.remove('tab-enter');
+  void el.offsetWidth; // force reflow so the animation restarts every time
+  el.classList.add('tab-enter');
+}
 function showScheduleTab(){
   $('scheduleView').style.display='';
   $('profitView').style.display='none';
   $('tabSchedule').classList.add('active');
   $('tabProfit').classList.remove('active');
   $('addBtn').style.display='';
+  playTabEnter($('scheduleView'));
 }
 function showProfitTab(){
   $('scheduleView').style.display='none';
@@ -1518,6 +1564,7 @@ function showProfitTab(){
   $('tabSchedule').classList.remove('active');
   $('tabProfit').classList.add('active');
   $('addBtn').style.display='none';
+  playTabEnter($('profitView'));
 }
 
 // ---------- events ----------
@@ -1531,8 +1578,12 @@ $('prev').onclick=()=>{ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} r
 $('next').onclick=()=>{ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); };
 $('todayBtn').onclick=()=>{ const n=new Date(); viewYear=n.getFullYear(); viewMonth=n.getMonth(); renderCalendar(); };
 $('exportIcsBtn').onclick=exportICS;
-$('jobSearch').addEventListener('input',renderJobList);
-$('profitJobSearch').addEventListener('input',renderProfitJobList);
+function debounce(fn,ms){
+  let t;
+  return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),ms); };
+}
+$('jobSearch').addEventListener('input',debounce(renderJobList,150));
+$('profitJobSearch').addEventListener('input',debounce(renderProfitJobList,150));
 $('exportCsvBtn').onclick=exportProfitCSV;
 $('pPrintBtn').onclick=()=>{ if(pEditingId) printInvoice(pEditingId); };
 $('toggleCompletedBtn').onclick=()=>{ showCompleted=!showCompleted; renderJobList(); };
