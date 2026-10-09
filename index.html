@@ -144,6 +144,12 @@
   .leaflet-control-attribution{background:rgba(16,33,46,.75)!important;color:var(--cream-dim)!important}
   .leaflet-control-attribution a{color:var(--teal)!important}
   .cluster-dot{display:flex;align-items:center;justify-content:center;background:var(--teal);color:#05151a;border-radius:50%;font-weight:700;font-family:'Inter',system-ui,sans-serif;font-size:13px;box-shadow:0 0 0 4px rgba(47,182,171,.25)}
+  .addr-dropdown{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--slate-2);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:40;max-height:220px;overflow-y:auto}
+  .addr-dropdown.show{display:block}
+  .addr-suggestion{padding:10px 12px;font-size:13.5px;color:var(--cream);cursor:pointer;border-bottom:1px solid var(--line)}
+  .addr-suggestion:last-child{border-bottom:none}
+  .addr-suggestion:hover,.addr-suggestion.active{background:var(--slate-3)}
+  .addr-loading{padding:10px 12px;font-size:12.5px;color:var(--cream-dim)}
 
   /* ── iPhone / narrow screens ── */
   @media(max-width:480px){
@@ -390,7 +396,7 @@
       <h2><span class="dot"></span> Save a location</h2>
       <div class="row2">
         <div class="field"><label>Label</label><input id="pinLabel" type="text" placeholder="e.g. Good referral area" autocomplete="off"></div>
-        <div class="field"><label>Address</label><input id="pinAddress" type="text" placeholder="123 Lake St, Fox Lake, IL" autocomplete="off"></div>
+        <div class="field" style="position:relative;"><label>Address</label><input id="pinAddress" type="text" placeholder="Start typing an address..." autocomplete="off"><div class="addr-dropdown" id="pinAddressDropdown"></div></div>
       </div>
       <div class="err" id="pinErr"></div>
       <button type="button" class="add-btn add-btn-sm" id="savePinBtn">+ Save location</button>
@@ -525,9 +531,10 @@
         <div class="field"><label>Customer phone (optional)</label><input id="fPhone" type="tel" placeholder="(847) 555-0100" autocomplete="off"></div>
         <div class="field"><label>Customer email (optional)</label><input id="fEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
       </div>
-      <div class="field">
+      <div class="field" style="position:relative;">
         <label>Job address (optional)</label>
-        <input id="fAddress" type="text" placeholder="123 Lake St, Fox Lake, IL" autocomplete="off">
+        <input id="fAddress" type="text" placeholder="Start typing an address..." autocomplete="off">
+        <div class="addr-dropdown" id="fAddressDropdown"></div>
       </div>
       <div class="field">
         <label>Notes (optional)</label>
@@ -580,6 +587,8 @@ let viewYear, viewMonth;          // currently displayed month
 let editingId=null;
 let pickedColor='c0';
 let showCompleted=false;
+let selectedJobAddressLoc=null; // {lat,lon} picked via autocomplete for the job modal's address field
+let selectedPinLoc=null; // same, for the Map tab's "Save a location" form
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
@@ -894,6 +903,77 @@ function queuedGeocode(address){
   return result;
 }
 
+// ---------- address autocomplete (live search-as-you-type, separate from
+// the cached single-address lookups above) ----------
+// Debounced search against Nominatim so the person picks a real, verified
+// address instead of free-typing one that might not match exactly - the
+// picked result's lat/lon is used directly, no further geocoding needed.
+function attachAddressAutocomplete(inputEl,dropdownEl,onSelect){
+  let debounceTimer=null;
+  let requestId=0;
+  let results=[];
+  let activeIndex=-1;
+
+  function hide(){
+    dropdownEl.classList.remove('show');
+    dropdownEl.innerHTML='';
+    results=[];
+    activeIndex=-1;
+  }
+  function renderResults(){
+    if(!results.length){ hide(); return; }
+    dropdownEl.innerHTML=results.map((r,i)=>`<div class="addr-suggestion${i===activeIndex?' active':''}" data-idx="${i}">${pEscape(r.display_name)}</div>`).join('');
+    dropdownEl.classList.add('show');
+    dropdownEl.querySelectorAll('.addr-suggestion').forEach(el=>{
+      // mousedown (not click), with preventDefault, so the input never
+      // blurs-and-hides the dropdown before the selection registers
+      el.addEventListener('mousedown',e=>{
+        e.preventDefault();
+        const r=results[parseInt(el.dataset.idx,10)];
+        onSelect(r);
+        hide();
+      });
+    });
+  }
+
+  inputEl.addEventListener('input',()=>{
+    onSelect(null); // typing invalidates any previously picked coordinate
+    clearTimeout(debounceTimer);
+    const q=inputEl.value.trim();
+    if(q.length<4){ hide(); return; }
+    const myRequest=++requestId;
+    debounceTimer=setTimeout(async()=>{
+      dropdownEl.innerHTML='<div class="addr-loading">Searching...</div>';
+      dropdownEl.classList.add('show');
+      try{
+        const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=us&q=${encodeURIComponent(q)}`);
+        if(myRequest!==requestId) return; // a newer search started - discard this stale response
+        if(!r.ok) throw new Error('search failed');
+        results=await r.json();
+        if(myRequest!==requestId) return;
+        activeIndex=-1;
+        renderResults();
+      }catch(e){
+        if(myRequest===requestId) hide();
+      }
+    },500);
+  });
+
+  inputEl.addEventListener('keydown',e=>{
+    if(!dropdownEl.classList.contains('show')) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); activeIndex=Math.min(activeIndex+1,results.length-1); renderResults(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); activeIndex=Math.max(activeIndex-1,0); renderResults(); }
+    else if(e.key==='Enter'){
+      if(activeIndex>=0 && results[activeIndex]){
+        e.preventDefault();
+        onSelect(results[activeIndex]);
+        hide();
+      }
+    }else if(e.key==='Escape'){ hide(); }
+  });
+  inputEl.addEventListener('blur',()=>{ setTimeout(hide,120); });
+}
+
 const MAP_PINS_KEY='nspg-map-pins-v1';
 let mapPins=[];
 let mapPinsRev=0;
@@ -942,9 +1022,12 @@ function initMap(){
   }
   try{
     map=L.map('mapContainer',{attributionControl:true}).setView([41.8781,-87.6298],10); // Chicago
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    // Plain dark street map (CARTO Dark Matter) - clean and low on clutter,
+    // matches the app's own dark theme. Never satellite imagery.
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
       maxZoom:19,
-      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      subdomains:'abcd',
+      attribution:'&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     // Group nearby pins into a count bubble so you can see at a glance how
     // many jobs are in an area, not just where - falls back to plain pins
@@ -972,7 +1055,7 @@ async function renderMapPins(){
     mapMarkers=[];
     const statusLabels={quoted:'Quoted',booked:'Booked','in-progress':'In progress',done:'Done'};
     for(const j of addressedJobs){
-      const loc=await queuedGeocode(j.address);
+      const loc=(j.addressLat!=null && j.addressLon!=null) ? {lat:j.addressLat,lon:j.addressLon} : await queuedGeocode(j.address);
       if(!loc) continue;
       const status=normalizeStatus(j.status);
       const color=MAP_STATUS_COLORS[status]||MAP_STATUS_COLORS.booked;
@@ -1214,6 +1297,8 @@ function openModal(job,prefillDate){
   $('fPhone').value = job?(job.phone||''):'';
   $('fEmail').value = job?(job.email||''):'';
   $('fAddress').value = job?(job.address||''):'';
+  selectedJobAddressLoc = (job && job.addressLat!=null && job.addressLon!=null) ? {lat:job.addressLat,lon:job.addressLon} : null;
+  $('fAddressDropdown').classList.remove('show');
   $('fNotes').value = job?(job.notes||''):'';
   pickedColor = job?job.color:COLORS[jobs.length%COLORS.length];
   $('err').textContent='';
@@ -1235,6 +1320,8 @@ async function saveJob(){
     phone:$('fPhone').value.trim(),
     email:$('fEmail').value.trim(),
     address:$('fAddress').value.trim(),
+    addressLat: selectedJobAddressLoc?selectedJobAddressLoc.lat:null,
+    addressLon: selectedJobAddressLoc?selectedJobAddressLoc.lon:null,
     notes:$('fNotes').value.trim(),
     color:pickedColor
   };
@@ -1829,6 +1916,14 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); clo
 
 $('tabSchedule').onclick=showScheduleTab;
 $('tabMap').onclick=showMapTab;
+attachAddressAutocomplete($('fAddress'),$('fAddressDropdown'),(picked)=>{
+  if(picked){ $('fAddress').value=picked.display_name; selectedJobAddressLoc={lat:parseFloat(picked.lat),lon:parseFloat(picked.lon)}; }
+  else{ selectedJobAddressLoc=null; }
+});
+attachAddressAutocomplete($('pinAddress'),$('pinAddressDropdown'),(picked)=>{
+  if(picked){ $('pinAddress').value=picked.display_name; selectedPinLoc={lat:parseFloat(picked.lat),lon:parseFloat(picked.lon)}; }
+  else{ selectedPinLoc=null; }
+});
 $('savePinBtn').onclick=async()=>{
   const label=$('pinLabel').value.trim();
   const address=$('pinAddress').value.trim();
@@ -1837,9 +1932,9 @@ $('savePinBtn').onclick=async()=>{
   $('savePinBtn').disabled=true;
   $('savePinBtn').textContent='Saving...';
   try{
-    const loc=await queuedGeocode(address);
+    const loc=selectedPinLoc||await queuedGeocode(address);
     if(!loc){
-      $('pinErr').textContent='Could not find that address. Try adding the city and state.';
+      $('pinErr').textContent='Could not find that address. Try picking a suggestion from the dropdown as you type.';
       return;
     }
     const newPin={id:'pin'+Date.now()+Math.floor(Math.random()*999),label:label||address,address,lat:loc.lat,lon:loc.lon,createdAt:new Date().toISOString()};
@@ -1851,6 +1946,7 @@ $('savePinBtn').onclick=async()=>{
     }
     $('pinLabel').value='';
     $('pinAddress').value='';
+    selectedPinLoc=null;
     renderMapPins();
   }finally{
     $('savePinBtn').disabled=false;
