@@ -391,21 +391,10 @@
         <span><i class="map-dot" style="background:var(--cream-dim);"></i>Booked</span>
         <span><i class="map-dot" style="background:var(--teal);"></i>In progress</span>
         <span><i class="map-dot" style="background:#7fd9b8;"></i>Done</span>
-        <span><i class="map-dot" style="background:#c79bd8;"></i>Saved location</span>
       </div>
     </section>
     <div class="empty" id="mapEmptyState" style="display:none;margin-top:14px;">No job locations yet. Add an address when creating or editing a job to see it pinned here.</div>
     <div class="empty" id="mapUnavailable" style="display:none;margin-top:14px;">Map couldn't load. Check your connection and reload the page.</div>
-
-    <section class="openings" style="margin-top:16px;">
-      <h2><span class="dot"></span> Save a location</h2>
-      <div class="row2">
-        <div class="field"><label>Label</label><input id="pinLabel" type="text" placeholder="e.g. Good referral area" autocomplete="off"></div>
-        <div class="field" style="position:relative;"><label>Address</label><input id="pinAddress" type="text" placeholder="Start typing an address..." autocomplete="off"><div class="addr-dropdown" id="pinAddressDropdown"></div></div>
-      </div>
-      <div class="err" id="pinErr"></div>
-      <button type="button" class="add-btn add-btn-sm" id="savePinBtn">+ Save location</button>
-    </section>
   </div>
 
   <div id="profitView" style="display:none;">
@@ -593,7 +582,6 @@ let editingId=null;
 let pickedColor='c0';
 let showCompleted=false;
 let selectedJobAddressLoc=null; // {lat,lon} picked via autocomplete for the job modal's address field
-let selectedPinLoc=null; // same, for the Map tab's "Save a location" form
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
@@ -979,30 +967,6 @@ function attachAddressAutocomplete(inputEl,dropdownEl,onSelect){
   inputEl.addEventListener('blur',()=>{ setTimeout(hide,120); });
 }
 
-const MAP_PINS_KEY='nspg-map-pins-v1';
-let mapPins=[];
-let mapPinsRev=0;
-async function loadMapPins(){
-  try{
-    const v=await Store.get(MAP_PINS_KEY);
-    const u=unwrapRev(v);
-    mapPins=u.items||[]; mapPinsRev=u.rev;
-  }catch(e){ mapPins=mapPins||[]; mapPinsRev=0; }
-}
-async function saveMapPins(){
-  if(CLOUD && CLOUD_REACHABLE && cloudReadConfirmed[MAP_PINS_KEY]){
-    try{
-      const latest=unwrapRev(await Store.cloudGet(MAP_PINS_KEY));
-      if(latest.rev!==mapPinsRev){
-        alert('Saved locations changed elsewhere (another device or tab) since you loaded this page. Reload to see the latest, then try again.');
-        return false;
-      }
-    }catch(e){ /* couldn't verify - fall through and save anyway */ }
-  }
-  mapPinsRev+=1;
-  await Store.set(MAP_PINS_KEY,wrapRev(mapPins,mapPinsRev));
-  return true;
-}
 
 let map=null;
 let clusterGroup=null;
@@ -1056,7 +1020,7 @@ async function renderMapPins(){
   mapPinsRendering=true;
   try{
     const addressedJobs=jobs.filter(j=>j.address&&j.address.trim());
-    $('mapEmptyState').style.display=(addressedJobs.length||mapPins.length)?'none':'block';
+    $('mapEmptyState').style.display=addressedJobs.length?'none':'block';
     if(clusterGroup) clusterGroup.clearLayers();
     else mapMarkers.forEach(m=>map.removeLayer(m));
     mapMarkers=[];
@@ -1074,48 +1038,11 @@ async function renderMapPins(){
       else marker.addTo(map);
       mapMarkers.push(marker);
     }
-    for(const pin of mapPins){
-      if(pin.lat==null||pin.lon==null) continue;
-      const marker=L.circleMarker([pin.lat,pin.lon],{radius:9,color:'#0b1822',weight:2,fillColor:'#c79bd8',fillOpacity:.9});
-      marker.bindPopup(()=>buildPinPopup(pin));
-      if(clusterGroup) clusterGroup.addLayer(marker);
-      else marker.addTo(map);
-      mapMarkers.push(marker);
-    }
   }finally{
     mapPinsRendering=false;
   }
 }
 
-function buildPinPopup(pin){
-  const wrap=document.createElement('div');
-  const name=document.createElement('div');
-  name.className='map-popup-name';
-  name.textContent=pin.label||'Saved location';
-  const meta=document.createElement('div');
-  meta.className='map-popup-meta';
-  meta.textContent=pin.address;
-  const delBtn=document.createElement('button');
-  delBtn.type='button';
-  delBtn.className='quick-done-btn';
-  delBtn.style.marginTop='8px';
-  delBtn.textContent='Delete';
-  delBtn.onclick=()=>deleteMapPin(pin.id);
-  wrap.appendChild(name); wrap.appendChild(meta); wrap.appendChild(delBtn);
-  return wrap;
-}
-
-async function deleteMapPin(id){
-  if(!confirm('Delete this saved location?')) return;
-  const removed=mapPins.find(p=>p.id===id);
-  mapPins=mapPins.filter(p=>p.id!==id);
-  const ok=await saveMapPins();
-  if(!ok){
-    if(removed) mapPins.push(removed); // save was refused - roll back
-    return;
-  }
-  renderMapPins();
-}
 
 // ---------- weather (best-effort rain-risk flag on upcoming jobs with an address) ----------
 // Uses Open-Meteo, a free no-API-key weather service. Purely additive - any
@@ -1927,39 +1854,6 @@ attachAddressAutocomplete($('fAddress'),$('fAddressDropdown'),(picked)=>{
   if(picked){ $('fAddress').value=picked.display_name; selectedJobAddressLoc={lat:parseFloat(picked.lat),lon:parseFloat(picked.lon)}; }
   else{ selectedJobAddressLoc=null; }
 });
-attachAddressAutocomplete($('pinAddress'),$('pinAddressDropdown'),(picked)=>{
-  if(picked){ $('pinAddress').value=picked.display_name; selectedPinLoc={lat:parseFloat(picked.lat),lon:parseFloat(picked.lon)}; }
-  else{ selectedPinLoc=null; }
-});
-$('savePinBtn').onclick=async()=>{
-  const label=$('pinLabel').value.trim();
-  const address=$('pinAddress').value.trim();
-  $('pinErr').textContent='';
-  if(!address){ $('pinErr').textContent='Enter an address.'; return; }
-  $('savePinBtn').disabled=true;
-  $('savePinBtn').textContent='Saving...';
-  try{
-    const loc=selectedPinLoc||await queuedGeocode(address);
-    if(!loc){
-      $('pinErr').textContent='Could not find that address. Try picking a suggestion from the dropdown as you type.';
-      return;
-    }
-    const newPin={id:'pin'+Date.now()+Math.floor(Math.random()*999),label:label||address,address,lat:loc.lat,lon:loc.lon,createdAt:new Date().toISOString()};
-    mapPins.push(newPin);
-    const ok=await saveMapPins();
-    if(!ok){
-      mapPins=mapPins.filter(p=>p.id!==newPin.id); // save was refused - roll back
-      return;
-    }
-    $('pinLabel').value='';
-    $('pinAddress').value='';
-    selectedPinLoc=null;
-    renderMapPins();
-  }finally{
-    $('savePinBtn').disabled=false;
-    $('savePinBtn').textContent='+ Save location';
-  }
-};
 $('tabProfit').onclick=showProfitTab;
 
 $('pAddBtn').onclick=()=>openProfitModal(null);
@@ -1996,7 +1890,6 @@ $('namesSaveBtn').onclick=async()=>{
 (async()=>{
   const n=new Date(); viewYear=n.getFullYear(); viewMonth=n.getMonth();
   await load();
-  await loadMapPins();
   $('ckStart').value=todayISO; $('ckEnd').value=todayISO;
   refresh();
   await loadProfitData();
