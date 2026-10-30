@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>North Shore Services — Door Hanger</title>
+<!--
+  Door hanger, 2-sided. Trim 4.25" x 11", with 0.125" bleed on every side (canvas 4.5" x 11.25").
+  Hang hole: 1.25" circle centred 1" below the top trim. Keep the top ~2" clear of text.
+  Add ?proof to the URL to show trim / safe / hole guides.
+  Edit the contact details in the CONTACT block of the script at the bottom.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: 4.5in 11.25in; margin: 0; }
+  :root{
+    --sun:#0c1820; --slate:#10212e; --line:#27465a;
+    --teal:#2fb6ab; --teal-dim:#1f6f6a;
+    --cream:#f3efe6; --cream-dim:#9fb1b8;
+    --warm:#ffcf7a; --ink:#10212e;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ background:#555; }
+  body{ font-family:'Inter',system-ui,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .page{
+    width:4.5in; height:11.25in; position:relative; overflow:hidden;
+    page-break-after:always; break-after:page;
+  }
+  .page:last-child{ page-break-after:auto; break-after:auto; }
+  /* everything is laid out inside the safe area: 0.25" from the canvas edge */
+  .safe{ position:absolute; left:.3in; right:.3in; top:2.05in; bottom:.32in; display:flex; flex-direction:column; }
+
+  /* ---------- FRONT ---------- */
+  .front{ background:
+      radial-gradient(120% 60% at 50% 34%, #173447 0%, var(--slate) 45%, var(--sun) 100%); color:var(--cream); }
+  .stars{ position:absolute; inset:0; }
+  .brand-top{ position:absolute; top:1.86in; left:0; right:0; text-align:center; }
+  .eyebrow{ font-size:10.5px; letter-spacing:.32em; font-weight:700; color:var(--teal); text-transform:uppercase; }
+  .by{ font-family:'Fraunces',serif; font-size:11px; color:var(--cream-dim); margin-top:3px; font-style:italic; }
+  .house{ width:100%; margin-top:.1in; }
+  h1{ font-family:'Fraunces',serif; font-weight:600; font-size:36px; line-height:1.04; text-align:center; margin-top:.16in; letter-spacing:-.01em; }
+  h1 em{ font-style:italic; color:var(--warm); text-shadow:0 0 18px rgba(255,190,90,.55); }
+  .street{ margin:.13in auto 0; font-size:11.5px; color:var(--cream-dim); display:flex; align-items:flex-end; gap:6px; justify-content:center; }
+  .street .blank{ display:inline-block; width:1.75in; border-bottom:1.2px solid var(--cream-dim); height:16px; }
+  .lede{ text-align:center; font-size:13.5px; line-height:1.45; margin-top:.2in; color:var(--cream); }
+  .lede b{ color:var(--teal); font-weight:600; }
+  ul.ticks{ list-style:none; margin:.2in auto 0; display:grid; gap:9px; width:100%; }
+  ul.ticks li{ display:flex; gap:9px; align-items:flex-start; font-size:12.8px; line-height:1.35; }
+  ul.ticks li svg{ flex:0 0 15px; margin-top:1px; }
+  .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:.24in; }
+  .step{ text-align:center; border-top:1px solid var(--line); padding-top:9px; }
+  .step .n{ font-family:'Fraunces',serif; font-weight:600; font-size:20px; color:var(--teal); line-height:1; }
+  .step .t{ font-size:10.8px; line-height:1.3; margin-top:5px; color:var(--cream); }
+  .cta{
+    margin-top:auto; border:1.5px solid var(--teal); border-radius:14px; padding:.13in .15in;
+    text-align:center; background:rgba(47,182,171,.08);
+  }
+  .cta .k{ font-size:10px; letter-spacing:.24em; font-weight:700; color:var(--teal); text-transform:uppercase; }
+  .cta .phone{ font-family:'Fraunces',serif; font-weight:700; font-size:30px; margin-top:2px; letter-spacing:.01em; }
+  .cta .s{ font-size:11px; color:var(--cream-dim); margin-top:2px; }
+  .flip{ text-align:center; font-size:10.5px; color:var(--cream-dim); margin-top:.11in; letter-spacing:.04em; }
+
+  /* ---------- BACK ---------- */
+  .back{ background:var(--cream); color:var(--ink); }
+  .back-head{ position:absolute; left:0; right:0; top:0; height:2.95in; background:var(--slate); color:var(--cream); }
+  .back-head .inner{ position:absolute; left:.3in; right:.3in; bottom:.26in; text-align:center; }
+  .back-head h2{ font-family:'Fraunces',serif; font-weight:600; font-size:29px; line-height:1.05; margin-top:6px; }
+  .back .safe{ top:3.2in; }
+  .svc{ display:grid; grid-template-columns:44px 1fr; gap:12px; padding:.19in 0; border-bottom:1px solid #d9d2c3; }
+  .svc:last-of-type{ border-bottom:none; }
+  .ico{ width:44px; height:44px; border-radius:12px; background:var(--slate); display:grid; place-items:center; }
+  .svc h3{ font-family:'Fraunces',serif; font-weight:600; font-size:20px; line-height:1.1; }
+  .svc .tag{ display:inline-block; font-size:9px; letter-spacing:.16em; font-weight:700; text-transform:uppercase; color:#fff; background:var(--teal-dim); padding:3px 7px; border-radius:999px; margin-bottom:5px; }
+  .svc p{ font-size:12.6px; line-height:1.42; margin-top:4px; color:#2b3a44; }
+  .svc .pts{ font-size:11.6px; color:#45545e; margin-top:5px; line-height:1.5; }
+  .trust{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:.12in; text-align:center; }
+  .trust div{ background:#e9e3d6; border-radius:10px; padding:9px 4px; font-size:10.5px; font-weight:600; line-height:1.25; color:var(--ink); }
+  .trust svg{ display:block; margin:0 auto 4px; }
+  .area{ margin-top:auto; text-align:center; font-size:11px; color:#45545e; line-height:1.5; }
+  .area b{ color:var(--ink); }
+  .contact{ margin-top:.12in; background:var(--slate); color:var(--cream); border-radius:14px; padding:.13in .15in; text-align:center; }
+  .contact .phone{ font-family:'Fraunces',serif; font-weight:700; font-size:27px; }
+  .contact .k{ font-size:10px; letter-spacing:.24em; font-weight:700; color:var(--teal); text-transform:uppercase; }
+  .contact .web{ font-size:11.5px; color:var(--cream-dim); margin-top:2px; }
+
+  /* placeholders: highlighted in proof mode so nothing unfinished gets printed */
+  .proof .ph{ outline:2px dashed #ff5a5a; outline-offset:2px; }
+
+  /* ---------- proof guides ---------- */
+  .guide{ display:none; position:absolute; pointer-events:none; z-index:50; }
+  .proof .guide{ display:block; }
+  .g-trim{ inset:.125in; border:1px solid #ff3b3b; }
+  .g-safe{ inset:.25in; border:1px dashed #36c7ff; }
+  .g-hole{ width:1.25in; height:1.25in; border-radius:50%; left:50%; top:calc(.125in + 1in); transform:translate(-50%,-50%); border:1.5px dashed #ff3b3b; background:rgba(255,59,59,.12); }
+  .g-slit{ width:0; height:.62in; left:50%; top:.125in; border-left:1.5px dashed #ff3b3b; transform:translateX(-50%); }
+  .g-label{ left:.3in; bottom:.06in; font:600 8px Inter, sans-serif; color:#ff3b3b; }
+</style>
+</head>
+<body>
+
+<!-- ============ FRONT ============ -->
+<section class="page front">
+  <svg class="stars" viewBox="0 0 432 1080" preserveAspectRatio="none" aria-hidden="true" id="stars"></svg>
+
+  <div class="brand-top">
+    <div class="eyebrow">North Shore Services</div>
+    <div class="by">by NorthShore Painting Group</div>
+  </div>
+
+  <div class="safe" style="top:2.3in">
+    <!-- house with glowing permanent lights along the roofline -->
+    <svg class="house" viewBox="0 0 360 200" aria-hidden="true">
+      <defs>
+        <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="2.6" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#1b3446"/><stop offset="1" stop-color="#132836"/>
+        </linearGradient>
+        <radialGradient id="win" cx=".5" cy=".5" r=".7">
+          <stop offset="0" stop-color="#ffd890"/><stop offset="1" stop-color="#d9913f"/>
+        </radialGradient>
+        <radialGradient id="spill" cx=".5" cy="0" r="1">
+          <stop offset="0" stop-color="rgba(255,190,100,.22)"/><stop offset="1" stop-color="rgba(255,190,100,0)"/>
+        </radialGradient>
+      </defs>
+      <!-- ground + light spill on the lawn -->
+      <ellipse cx="180" cy="196" rx="190" ry="18" fill="url(#spill)"/>
+      <rect x="0" y="190" width="360" height="10" fill="#0a151c"/>
+      <!-- garage wing -->
+      <polygon points="18,120 82,82 146,120" fill="#152d3d"/>
+      <rect x="26" y="120" width="112" height="70" fill="url(#wall)"/>
+      <rect x="40" y="138" width="84" height="52" rx="2" fill="#0f2230" stroke="#27465a"/>
+      <g stroke="#27465a" stroke-width="1"><line x1="40" y1="151" x2="124" y2="151"/><line x1="40" y1="164" x2="124" y2="164"/><line x1="40" y1="177" x2="124" y2="177"/></g>
+      <!-- main two-storey house -->
+      <polygon points="128,92 238,22 348,92" fill="#173246"/>
+      <rect x="140" y="92" width="196" height="98" fill="url(#wall)"/>
+      <rect x="158" y="108" width="34" height="28" rx="2" fill="url(#win)"/>
+      <rect x="284" y="108" width="34" height="28" rx="2" fill="url(#win)"/>
+      <rect x="221" y="108" width="34" height="28" rx="2" fill="url(#win)" opacity=".85"/>
+      <rect x="158" y="150" width="34" height="28" rx="2" fill="url(#win)" opacity=".9"/>
+      <rect x="284" y="150" width="34" height="28" rx="2" fill="url(#win)"/>
+      <rect x="225" y="148" width="26" height="42" rx="2" fill="#0f2230" stroke="#2fb6ab" stroke-width="1"/>
+      <circle cx="246" cy="170" r="1.6" fill="#ffcf7a"/>
+      <!-- light points get drawn here by the script, along these roof edges -->
+      <g id="lights" filter="url(#glow)"></g>
+    </svg>
+
+    <h1>We just lit up<br>your <em>neighbor's</em> home.</h1>
+    <div class="street">Installed on <span class="blank"></span></div>
+
+    <p class="lede">
+      <b>Permanent roofline lighting</b>, installed once and ready
+      every season. No more ladders every November.
+    </p>
+
+    <ul class="ticks">
+      <li><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="none" stroke="#2fb6ab" stroke-width="1.4"/><path d="M4.6 8.3l2.2 2.2 4.6-4.9" fill="none" stroke="#2fb6ab" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span><b>Every holiday from your phone:</b> Christmas, Halloween, 4th of July, game days</span></li>
+      <li><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="none" stroke="#2fb6ab" stroke-width="1.4"/><path d="M4.6 8.3l2.2 2.2 4.6-4.9" fill="none" stroke="#2fb6ab" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span><b>Warm white</b> for everyday curb appeal and accent lighting</span></li>
+      <li><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="none" stroke="#2fb6ab" stroke-width="1.4"/><path d="M4.6 8.3l2.2 2.2 4.6-4.9" fill="none" stroke="#2fb6ab" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span><b>Low-profile track</b> that blends into your trim by day</span></li>
+      <li><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="none" stroke="#2fb6ab" stroke-width="1.4"/><path d="M4.6 8.3l2.2 2.2 4.6-4.9" fill="none" stroke="#2fb6ab" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span><b>Installed by a local crew</b>, the same people who paint homes here</span></li>
+    </ul>
+
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div class="t">Free estimate &amp; lighting design</div></div>
+      <div class="step"><div class="n">2</div><div class="t">Professional install on your roofline</div></div>
+      <div class="step"><div class="n">3</div><div class="t">Control it all from your phone</div></div>
+    </div>
+
+    <div class="cta">
+      <div class="k">Free estimate · Call or text</div>
+      <div class="phone"><span class="ph" data-f="phone"></span></div>
+      <div class="s">Ask to see your neighbor's lights</div>
+    </div>
+    <div class="flip">More services on the back &rarr;</div>
+  </div>
+
+  <div class="guide g-trim"></div><div class="guide g-safe"></div><div class="guide g-slit"></div><div class="guide g-hole"></div>
+  <div class="guide g-label">FRONT · red = trim &amp; die-cut · blue = safe area</div>
+</section>
+
+<!-- ============ BACK ============ -->
+<section class="page back">
+  <div class="back-head">
+    <div class="inner">
+      <div class="eyebrow">One local crew · Your whole exterior</div>
+      <h2>Other services<br>we offer</h2>
+    </div>
+  </div>
+
+  <div class="safe">
+    <div class="svc">
+      <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2fb6ab" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="15" height="6" rx="1.5"/><path d="M18 6h2.5v5H11v3"/><rect x="9.5" y="14" width="3" height="7" rx="1"/></svg></div>
+      <div>
+        <span class="tag">Our core business</span>
+        <h3>Interior &amp; Exterior Painting</h3>
+        <p>NorthShore Painting Group: clean prep, sharp lines, and a crew that respects your home.</p>
+        <div class="pts">Walls &amp; ceilings · Siding &amp; trim · Doors · Free written estimates</div>
+      </div>
+    </div>
+
+    <div class="svc">
+      <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2fb6ab" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h20l-2 4H4z"/><path d="M17 10v6"/><path d="M17 19.5c-1.1 0-2-.9-2-1.9 0-1.1 2-3.6 2-3.6s2 2.5 2 3.6c0 1-.9 1.9-2 1.9z"/></svg></div>
+      <div>
+        <span class="tag">New · Gutter Care Plan</span>
+        <h3>Gutter Cleaning</h3>
+        <p>Three visits a year, timed for Lake County trees: <b>spring</b>, <b>early fall</b>, and <b>after the last leaves drop</b>, before the freeze.</p>
+        <div class="pts">Downspouts flushed · Before &amp; after photos · Easy monthly payments · One-time cleanings too</div>
+      </div>
+    </div>
+
+    <div class="svc">
+      <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2fb6ab" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><g fill="#ffcf7a" stroke="none"><circle cx="5" cy="13" r="1.1"/><circle cx="8" cy="10.7" r="1.1"/><circle cx="12" cy="7.6" r="1.1"/><circle cx="16" cy="10.7" r="1.1"/><circle cx="19" cy="13" r="1.1"/></g></svg></div>
+      <div>
+        <span class="tag">Seasonal</span>
+        <h3>Holiday Light Installation</h3>
+        <p>Prefer classic seasonal lights? We design, install, take down in January, and store them for next year.</p>
+      </div>
+    </div>
+
+    <div class="trust">
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1f6f6a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Local &amp;<br>owner-operated</div>
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1f6f6a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Free written<br>estimates</div>
+      <div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1f6f6a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>Photos of<br>every job</div>
+    </div>
+
+    <div class="area">
+      Proudly serving <b>Round Lake, Grayslake, Libertyville</b><br>and surrounding Lake County communities
+    </div>
+    <div class="contact">
+      <div class="k">Call or text for a free estimate</div>
+      <div class="phone"><span class="ph" data-f="phone"></span></div>
+      <div class="web"><span class="ph" data-f="web"></span></div>
+    </div>
+  </div>
+
+  <div class="guide g-trim"></div><div class="guide g-safe"></div><div class="guide g-slit"></div><div class="guide g-hole"></div>
+  <div class="guide g-label">BACK · red = trim &amp; die-cut · blue = safe area</div>
+</section>
+
+<script>
+  // ---------- CONTACT: edit these before printing ----------
+  const CONTACT = {
+    phone: '(847) 000-0000',
+    web:   'northshoreservices.com  ·  @northshorepaintinggroup'
+  };
+  // ---------------------------------------------------------
+
+  document.querySelectorAll('.ph').forEach(el => { el.textContent = CONTACT[el.dataset.f] || ''; });
+  if (location.search.includes('proof')) document.body.classList.add('proof');
+
+  // roofline lights: evenly spaced points along each roof edge
+  const edges = [[18,120,82,82],[82,82,146,120],[128,92,238,22],[238,22,348,92],[140,92,336,92],[26,120,138,120]];
+  const palette = ['#ffd27a','#ffd27a','#ffd27a','#ff5d73','#5fe0d4','#ffd27a','#8fa8ff'];
+  const g = document.getElementById('lights'); let n = 0;
+  for (const [x1,y1,x2,y2] of edges) {
+    const len = Math.hypot(x2-x1, y2-y1), steps = Math.round(len / 8.5);
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', x1 + (x2-x1)*t); c.setAttribute('cy', y1 + (y2-y1)*t - 1);
+      c.setAttribute('r', 2.1); c.setAttribute('fill', palette[n++ % palette.length]);
+      g.appendChild(c);
+    }
+  }
+
+  // faint stars in the upper sky (seeded so every print is identical)
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const sky = document.getElementById('stars');
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', rnd()*432); c.setAttribute('cy', 20 + rnd()*330);
+    c.setAttribute('r', .4 + rnd()*.9); c.setAttribute('fill', `rgba(243,239,230,${.15 + rnd()*.45})`);
+    sky.appendChild(c);
+  }
+</script>
+</body>
+</html>
